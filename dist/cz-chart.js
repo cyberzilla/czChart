@@ -2,7 +2,7 @@
  * czChart v1.0.0 — Lightweight, Data-Driven Chart Library
  * (c) 2026 CyberZilla
  * Released under the MIT License
- * Built: 2026-09-25T09:38:54.832Z
+ * Built: 2026-09-25T10:22:52.346Z
  */
 
 (function(global) {
@@ -2417,9 +2417,12 @@ class PieSeries {
             }
         }
 
-        // Second pass: draw hovered slice ON TOP with explode + shadow
-        if (this._hoverIndex >= 0) {
-            const hSlice = this._renderedSlices.find(s => s.index === this._hoverIndex);
+        // Second pass: draw active slice ON TOP with explode + shadow
+        // Active = hovered via mouse OR highlighted via legend hover
+        const activeIdx = this._hoverIndex >= 0 ? this._hoverIndex : (hlSlice >= 0 ? hlSlice : -1);
+
+        if (activeIdx >= 0) {
+            const hSlice = this._renderedSlices.find(s => s.index === activeIdx);
             if (hSlice) {
                 const midAngle = (hSlice.startAngleRad + hSlice.endAngleRad) / 2;
                 const dx = Math.cos(midAngle) * explodeOffset;
@@ -2432,6 +2435,7 @@ class PieSeries {
                 ctx.shadowOffsetY = 4;
 
                 // Draw exploded slice
+                ctx.globalAlpha = 1.0;
                 this._drawSlice(
                     ctx, cx, cy,
                     radius + 2, innerRadius,
