@@ -2,7 +2,7 @@
  * czChart v1.0.0 — Lightweight, Data-Driven Chart Library
  * (c) 2026 CyberZilla
  * Released under the MIT License
- * Built: 2026-09-25T12:02:59.232Z
+ * Built: 2026-09-25T16:40:25.850Z
  */
 
 (function(global) {
@@ -620,9 +620,9 @@ const DEFAULTS = {
         mode: 'x'  // x, y, xy
     },
     series: {
-        lineWidth: 2,
-        pointRadius: 0,
-        pointHoverRadius: 5,
+        lineWidth: 1.5,
+        pointRadius: 2.5,
+        pointHoverRadius: 8,
         smooth: false,
         fill: false,
         fillOpacity: 0.15
@@ -1875,9 +1875,9 @@ class LineSeries {
         this.options = Object.assign({
             smooth: false,
             fill: false,
-            lineWidth: 2,
-            pointRadius: 4,
-            pointHoverRadius: 6,
+            lineWidth: 1.5,
+            pointRadius: 2.5,
+            pointHoverRadius: 8,
             visible: true
         }, options);
         this.dataset = null;
@@ -2044,57 +2044,61 @@ class LineSeries {
         ctx.lineCap = 'round';
         ctx.stroke(path);
 
-        // Draw normal (non-selected) points inside clip
+        ctx.restore(); // exit clip — line and fill are clipped, points are NOT
+        this._renderedPoints = points;
+
+        // Draw points OUTSIDE clip so edge points are not cut off
         if (this.options.pointRadius > 0) {
+            ctx.save();
             const color = this.dataset.color || '#000';
+            const bgColor = this._getBackgroundColor();
+
+            // Normal points: small subtle dots (skip selected, drawn separately)
             points.forEach(p => {
-                if (this._selectedPoints.has(p.index)) return; // draw later
+                if (this._selectedPoints.has(p.index)) return;
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, this.options.pointRadius, 0, Math.PI * 2);
                 ctx.fillStyle = color;
                 ctx.fill();
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 1.5;
+                ctx.strokeStyle = bgColor;
+                ctx.lineWidth = 1;
                 ctx.stroke();
             });
-        }
 
-        ctx.restore(); // exit clip
-        this._renderedPoints = points;
-
-        // Draw selected points OUTSIDE clip so ring is not cut off
-        if (this.options.pointRadius > 0 && this._selectedPoints.size > 0) {
-            ctx.save();
-            const color = this.dataset.color || '#000';
+            // Selected (toggled) points: hollow ring with center dot
             points.forEach(p => {
                 if (!this._selectedPoints.has(p.index)) return;
                 const r = this.options.pointHoverRadius;
 
-                // Outer ring
+                // Mask + hollow circle
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, r + 4, 0, Math.PI * 2);
-                ctx.strokeStyle = color;
-                ctx.lineWidth = 2;
-                ctx.stroke();
-
-                // White gap ring
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, r + 1, 0, Math.PI * 2);
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-
-                // Filled point
+                ctx.arc(p.x, p.y, r + 2, 0, Math.PI * 2);
+                ctx.fillStyle = bgColor;
+                ctx.fill();
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+                ctx.fillStyle = bgColor;
+                ctx.fill();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = this.options.lineWidth;
+                ctx.stroke();
+
+                // Center dot
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
                 ctx.fillStyle = color;
                 ctx.fill();
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 1.5;
-                ctx.stroke();
             });
             ctx.restore();
         }
+    }
+
+    /**
+     * Get chart background color from theme
+     * @returns {string} Background color
+     */
+    _getBackgroundColor() {
+        return (this.chart._theme && this.chart._theme.background) || '#ffffff';
     }
 
     /**
@@ -2117,14 +2121,32 @@ class LineSeries {
         const point = this._renderedPoints.find(p => p.index === activeIndex);
         if (!point) return;
 
+        const r = this.options.pointHoverRadius;
+        const color = this.dataset.color || '#000';
+        const bgColor = this._getBackgroundColor();
+
         ctx.save();
+
+        // Mask: covers line bleed at circle edge
         ctx.beginPath();
-        ctx.arc(point.x, point.y, this.options.pointHoverRadius, 0, Math.PI * 2);
-        ctx.fillStyle = this.dataset.color || '#000';
+        ctx.arc(point.x, point.y, r + 2, 0, Math.PI * 2);
+        ctx.fillStyle = bgColor;
         ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
+
+        // Hollow circle: bg fill + colored stroke (C3.js expand)
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = bgColor;
+        ctx.fill();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = this.options.lineWidth;
         ctx.stroke();
+
+        // Center dot
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
         ctx.restore();
     }
 
@@ -2365,7 +2387,7 @@ class BarSeries {
             if (isInside) {
                 return {
                     index: bar.index,
-                    x: bar.x + bar.width / 2,
+                    x: Math.round(bar.x + bar.width / 2) + 0.5,
                     y: bar.value >= 0 ? bar.y : bar.y + bar.height,
                     value: bar.value,
                     seriesName: this.dataset.name,
@@ -2510,7 +2532,13 @@ class PieSeries {
 
         let startAngleRad = (this.options.startAngle * Math.PI) / 180;
 
+        // Easing helpers for consistent animation (used in total calc AND visual)
+        const _easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+        const _easeInCubic = (t) => t * t * t;
+
         // Calculate total: animate entering/exiting slices proportionally
+        // IMPORTANT: use the same easing curve here as in the visual section
+        // so angular redistribution stays perfectly in sync with the visual.
         let total = 0;
         for (let i = 0; i < this.dataset.values.length; i++) {
             const v = this.dataset.values[i] || 0;
@@ -2518,9 +2546,11 @@ class PieSeries {
             const anim = this._sliceAnims.get(i);
             if (this._hiddenSlices && this._hiddenSlices.has(i) && !anim) continue;
             if (anim && anim.type === 'out') {
-                total += v * (1 - anim.progress);
+                const easedOut = _easeInCubic(anim.progress);
+                total += v * (1 - easedOut);
             } else if (anim && anim.type === 'in') {
-                total += v * anim.progress;
+                const easedIn = _easeOutCubic(anim.progress);
+                total += v * easedIn;
             } else {
                 total += v;
             }
@@ -2549,16 +2579,11 @@ class PieSeries {
             visibleCount++;
         }
 
-        // Easing functions
+        // Easing function for initial page-load animation only
         const easeOutBack = (t) => {
             const c1 = 1.70158;
             const c3 = c1 + 1;
             return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-        };
-        const easeInBack = (t) => {
-            const c1 = 1.70158;
-            const c3 = c1 + 1;
-            return c3 * t * t * t - c1 * t * t;
         };
         const animStyle = this.options.animationStyle || 'bounce';
 
@@ -2579,9 +2604,10 @@ class PieSeries {
             if (this._hiddenSlices && this._hiddenSlices.has(i) && !anim) continue;
 
             // Calculate effective fraction (animate for enter/exit)
+            // Use the SAME easing as in total calculation for perfect sync
             let effectiveValue = value;
-            if (isExiting) effectiveValue = value * (1 - anim.progress);
-            if (isEntering) effectiveValue = value * anim.progress;
+            if (isExiting) effectiveValue = value * (1 - _easeInCubic(anim.progress));
+            if (isEntering) effectiveValue = value * _easeOutCubic(anim.progress);
             
             const fraction = total > 0 ? effectiveValue / total : 0;
             const sliceAngle = fraction * Math.PI * 2;
@@ -2596,32 +2622,17 @@ class PieSeries {
             let drawRadius = radius, drawInner = innerRadius;
 
             if (isExiting) {
-                // Smooth out — no bounce/overshoot
-                const t = anim.progress * anim.progress; // easeInQuad
-                const midAngle = (angle + endAngle) / 2;
-                if (animStyle === 'bounce') {
-                    offsetX = Math.cos(midAngle) * dropDistance * t;
-                    offsetY = Math.sin(midAngle) * dropDistance * t;
-                } else {
-                    drawRadius = radius * (1 - t);
-                    drawInner = innerRadius * (1 - t);
-                }
-                sliceAlpha = Math.max(0, 1 - anim.progress * 1.2);
+                // Legend toggle out: smooth fade + angular shrink (in-place, no offset)
+                // Angular shrink is handled by effectiveValue above.
+                const t = _easeInCubic(anim.progress);
+                sliceAlpha = Math.max(0, 1 - t);
             } else if (isEntering) {
-                // Smooth in — no bounce/overshoot
-                const t = 1 - Math.pow(1 - anim.progress, 3); // easeOutCubic
-                const midAngle = (angle + endAngle) / 2;
-                if (animStyle === 'bounce') {
-                    offsetX = Math.cos(midAngle) * dropDistance * (1 - t);
-                    offsetY = Math.sin(midAngle) * dropDistance * (1 - t);
-                } else {
-                    // grow style: expand radius
-                    drawRadius = radius * anim.progress;
-                    drawInner = innerRadius * anim.progress;
-                }
-                sliceAlpha = Math.min(1, anim.progress * 1.5);
+                // Legend toggle in: smooth fade + angular grow (in-place, no offset)
+                // Angular grow is handled by effectiveValue above.
+                const t = _easeOutCubic(anim.progress);
+                sliceAlpha = t;
             } else if (progress < 1) {
-                // Initial page-load animation
+                // Initial page-load animation (bounce drop-in from outside)
                 const sliceStart = visibleIdx / visibleCount;
                 const sliceEnd = (visibleIdx + 1) / visibleCount;
                 const overlap = 0.3 / visibleCount;
@@ -2652,9 +2663,12 @@ class PieSeries {
             });
 
             // Skip active slice in first pass
-            const isActive = isHovered || (hlSlice >= 0 && hlSlice === i);
+            const hasActiveAnims = this._sliceAnims.size > 0;
+            const isActive = isHovered || (!hasActiveAnims && hlSlice >= 0 && hlSlice === i);
             if (!isActive && (sliceProgress > 0 || isExiting || isEntering)) {
-                ctx.globalAlpha = (hlSlice >= 0) ? 0.2 * sliceAlpha : sliceAlpha;
+                // Don't apply highlight dimming while toggle animations are running
+                const applyHighlight = hlSlice >= 0 && !hasActiveAnims;
+                ctx.globalAlpha = applyHighlight ? 0.2 * sliceAlpha : sliceAlpha;
                 this._drawSlice(ctx, cx, cy, drawRadius, drawInner, angle, endAngle, color, offsetX, offsetY);
                 ctx.globalAlpha = 1.0;
             }
@@ -2693,8 +2707,9 @@ class PieSeries {
         }
 
         // Second pass: draw active slice ON TOP with grown radius (no translate)
-        // Active = hovered via mouse OR highlighted via legend hover
-        const activeIdx = this._hoverIndex >= 0 ? this._hoverIndex : (hlSlice >= 0 ? hlSlice : -1);
+        // Active = hovered via mouse OR highlighted via legend hover (but NOT during toggle animations)
+        const hasAnims = this._sliceAnims.size > 0;
+        const activeIdx = this._hoverIndex >= 0 ? this._hoverIndex : (!hasAnims && hlSlice >= 0 ? hlSlice : -1);
         const growPx = 6;
 
         if (activeIdx >= 0 && progress >= 1) {
@@ -2878,6 +2893,7 @@ class ScatterSeries {
         }, options);
         this.dataset = null;
         this.visible = this.options.visible;
+        this._selectedPoints = new Set();
     }
 
     setData(dataset) {
@@ -2940,11 +2956,11 @@ class ScatterSeries {
     draw(ctx, plotArea, xScale, yScale, progress) {
         if (!this.dataset || !this.visible || !this.dataset.points) return;
 
+        const color = this.dataset.color || '#000';
+        const bgColor = this._getBackgroundColor();
+
         ctx.save();
         ctx.globalAlpha = progress; // Fade in animation
-        ctx.fillStyle = this.dataset.color || '#000';
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1.5;
 
         this._renderedPoints = [];
 
@@ -2960,19 +2976,68 @@ class ScatterSeries {
             }
             r *= progress; // Scale up animation
 
-            this._drawShape(ctx, this.options.pointShape, px, py, Math.max(0.1, r));
-
             this._renderedPoints.push({
-                index: i,
-                x: px,
-                y: py,
-                valueX: pt.x,
-                valueY: pt.y,
-                r: r
+                index: i, x: px, y: py,
+                valueX: pt.x, valueY: pt.y, r: r
             });
+
+            // Skip selected points in first pass
+            if (this._selectedPoints.has(i)) return;
+
+            ctx.fillStyle = color;
+            ctx.strokeStyle = bgColor;
+            ctx.lineWidth = 1.5;
+            this._drawShape(ctx, this.options.pointShape, px, py, Math.max(0.1, r));
         });
 
         ctx.restore();
+
+        // Second pass: selected points — hollow ring + center dot
+        if (this._selectedPoints.size > 0) {
+            ctx.save();
+            for (const pt of this._renderedPoints) {
+                if (!this._selectedPoints.has(pt.index)) continue;
+                const r = Math.max(3, pt.r * 1.2);
+
+                // Mask + hollow circle
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, r + 2, 0, Math.PI * 2);
+                ctx.fillStyle = bgColor;
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+                ctx.fillStyle = bgColor;
+                ctx.fill();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                // Center dot
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+    }
+
+    /**
+     * Toggle a data point selection
+     */
+    togglePoint(index) {
+        if (this._selectedPoints.has(index)) {
+            this._selectedPoints.delete(index);
+        } else {
+            this._selectedPoints.add(index);
+        }
+    }
+
+    /**
+     * Get chart background color from theme
+     */
+    _getBackgroundColor() {
+        return (this.chart._theme && this.chart._theme.background) || '#ffffff';
     }
 
     drawHover(ctx, plotArea, xScale, yScale, activeIndex) {
@@ -2980,14 +3045,30 @@ class ScatterSeries {
         const pt = this._renderedPoints.find(p => p.index === activeIndex);
         if (!pt) return;
 
-        ctx.save();
-        ctx.shadowColor = this.dataset.color || '#000';
-        ctx.shadowBlur = 10;
-        ctx.fillStyle = this.dataset.color || '#000';
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
+        const r = Math.max(3, pt.r * 1.2);
+        const color = this.dataset.color || '#000';
+        const bgColor = this._getBackgroundColor();
 
-        this._drawShape(ctx, this.options.pointShape, pt.x, pt.y, pt.r * 1.5);
+        ctx.save();
+
+        // Mask + hollow circle
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, r + 2, 0, Math.PI * 2);
+        ctx.fillStyle = bgColor;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = bgColor;
+        ctx.fill();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Center dot
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
         ctx.restore();
     }
 
@@ -3149,38 +3230,57 @@ class RadarSeries {
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Draw data points
+        // Draw normal (non-selected) data points
+        const bgColor = this._getBackgroundColor();
         for (const pt of this._renderedPoints) {
-            const isSelected = this._selectedPoints.has(pt.index);
-            const r = isSelected ? 6 : 3;
-
-            if (isSelected) {
-                // Outer ring
-                ctx.beginPath();
-                ctx.arc(pt.x, pt.y, r + 4, 0, Math.PI * 2);
-                ctx.strokeStyle = color;
-                ctx.lineWidth = 2;
-                ctx.stroke();
-
-                // White gap ring
-                ctx.beginPath();
-                ctx.arc(pt.x, pt.y, r + 1, 0, Math.PI * 2);
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-            }
-
-            // Filled point
+            if (this._selectedPoints.has(pt.index)) continue;
             ctx.beginPath();
-            ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+            ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
             ctx.fillStyle = color;
             ctx.fill();
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = bgColor;
+            ctx.lineWidth = 1;
             ctx.stroke();
         }
 
         ctx.restore();
+
+        // Selected points — hollow ring + center dot
+        if (this._selectedPoints.size > 0) {
+            ctx.save();
+            const bgColor = this._getBackgroundColor();
+            for (const pt of this._renderedPoints) {
+                if (!this._selectedPoints.has(pt.index)) continue;
+                const r = 8;
+
+                // Mask + hollow circle
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, r + 2, 0, Math.PI * 2);
+                ctx.fillStyle = bgColor;
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+                ctx.fillStyle = bgColor;
+                ctx.fill();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Center dot
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+    }
+
+    /**
+     * Get chart background color from theme
+     */
+    _getBackgroundColor() {
+        return (this.chart._theme && this.chart._theme.background) || '#ffffff';
     }
 
     /**
@@ -3199,14 +3299,30 @@ class RadarSeries {
         const pt = this._renderedPoints.find(p => p.index === activeIndex);
         if (!pt) return;
 
+        const r = 8;
+        const color = this.dataset.color || '#000';
+        const bgColor = this._getBackgroundColor();
+
         ctx.save();
+
+        // Mask + hollow circle
         ctx.beginPath();
-        ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2);
-        ctx.fillStyle = this.dataset.color || '#000';
+        ctx.arc(pt.x, pt.y, r + 2, 0, Math.PI * 2);
+        ctx.fillStyle = bgColor;
         ctx.fill();
-        ctx.strokeStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = bgColor;
+        ctx.fill();
+        ctx.strokeStyle = color;
         ctx.lineWidth = 2;
         ctx.stroke();
+
+        // Center dot
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
         ctx.restore();
     }
 
@@ -3573,6 +3689,13 @@ window.CZ.RadarSeries = RadarSeries;
             if (!itemEl) return;
             const index = parseInt(itemEl.getAttribute('data-index'), 10);
             if (isNaN(index)) return;
+
+            // Reset highlight on click to prevent flash/flicker during toggle animation.
+            // (mouseover fires alongside click, setting highlight which dims other slices)
+            if (this.chart.highlightSeries) {
+                this.chart.highlightSeries(-1);
+            }
+
             if (this.chart.toggleSeries) {
                 this.chart.toggleSeries(index);
             }
@@ -3663,7 +3786,9 @@ window.CZ.RadarSeries = RadarSeries;
 
             // Draw vertical line
             if (this.options.mode === 'x' || this.options.mode === 'both') {
-                const x = crispCoord(snappedX !== undefined ? snappedX : mouseX);
+                // snappedX from hit test is already crisp (Math.round + 0.5),
+                // so use it directly to avoid double-rounding offset
+                const x = snappedX !== undefined ? snappedX : crispCoord(mouseX);
                 if (x >= plotArea.left && x <= plotArea.right) {
                     ctx.moveTo(x, plotArea.top);
                     ctx.lineTo(x, plotArea.bottom);
@@ -4743,10 +4868,40 @@ window.CZ.RadarSeries = RadarSeries;
           }
         } else {
           // For other charts: draw hover effects on overlay canvas
+          // Find which series has the point closest to the mouse cursor (by Y distance)
+          // so we can draw it LAST (on top of overlapping points)
+          let closestSeries = null;
+          let closestDist = Infinity;
+          for (const s of this.series) {
+            if (!s.visible || !s.drawHover || !s._renderedPoints) continue;
+            const pt = s._renderedPoints.find(p => p.index === hitNearest.index);
+            if (pt) {
+              const dy = Math.abs(mouseY - pt.y);
+              if (dy < closestDist) {
+                closestDist = dy;
+                closestSeries = s;
+              }
+            }
+          }
+
+          // Draw non-closest series first, then closest series last (on top)
           this.series.forEach(s => {
-            if (!s.visible || !s.drawHover) return;
+            if (!s.visible || !s.drawHover || s === closestSeries) return;
             s.drawHover(overlayCtx, this.plotArea, this.scales.x, this.scales.y, hitNearest.index);
           });
+          if (closestSeries) {
+            // Erase the area around the closest point to guarantee it appears fully on top
+            const closestPt = closestSeries._renderedPoints.find(p => p.index === hitNearest.index);
+            if (closestPt) {
+              overlayCtx.save();
+              overlayCtx.globalCompositeOperation = 'destination-out';
+              overlayCtx.beginPath();
+              overlayCtx.arc(closestPt.x, closestPt.y, 12, 0, Math.PI * 2);
+              overlayCtx.fill();
+              overlayCtx.restore();
+            }
+            closestSeries.drawHover(overlayCtx, this.plotArea, this.scales.x, this.scales.y, hitNearest.index);
+          }
         }
 
         this._activeHit = hitNearest;
@@ -4763,6 +4918,16 @@ window.CZ.RadarSeries = RadarSeries;
         }
         this._activeHit = null;
       }
+
+      // Cursor: pointer only when mouse is close to a data point
+      const canvas = this.renderer.getMainCanvas();
+      let isOverPoint = false;
+      if (hitNearest) {
+        const dx = mouseX - hitNearest.x;
+        const dy = mouseY - hitNearest.y;
+        isOverPoint = Math.sqrt(dx * dx + dy * dy) < 10;
+      }
+      canvas.style.cursor = isOverPoint ? 'pointer' : '';
 
       // Tooltip
       if (this.tooltip && this.options.tooltip.enabled) {
@@ -4794,17 +4959,18 @@ window.CZ.RadarSeries = RadarSeries;
 
     /** @private */
     _handleClick(e) {
-      if (this._destroyed || !this._activeHit) return;
+      if (this._destroyed) return;
       
-      // Toggle point selection on line/area/radar charts
-      if (this.type === 'line' || this.type === 'area' || this.type === 'radar') {
-        const hit = this._activeHit;
-        // Find the exact series+point closest to click
-        const rect = this.renderer.mainCanvas.getBoundingClientRect();
-        const dpr = window.devicePixelRatio || 1;
-        const mx = (e.clientX - rect.left) * dpr;
-        const my = (e.clientY - rect.top) * dpr;
-        
+      // Toggle point selection on line/area/scatter/radar charts
+      if (this.type === 'line' || this.type === 'area' || this.type === 'scatter' || this.type === 'radar') {
+        const rect = this.renderer.getMainCanvas().getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+
+        // Use _activeHit if available, otherwise do our own hit test
+        const hit = this._activeHit || this.hitTester.findNearest(mx, my);
+        if (!hit) return;
+
         let bestSeries = null;
         let bestDist = Infinity;
         for (const s of this.series) {

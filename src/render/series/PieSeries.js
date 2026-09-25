@@ -124,7 +124,13 @@ class PieSeries {
 
         let startAngleRad = (this.options.startAngle * Math.PI) / 180;
 
+        // Easing helpers for consistent animation (used in total calc AND visual)
+        const _easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+        const _easeInCubic = (t) => t * t * t;
+
         // Calculate total: animate entering/exiting slices proportionally
+        // IMPORTANT: use the same easing curve here as in the visual section
+        // so angular redistribution stays perfectly in sync with the visual.
         let total = 0;
         for (let i = 0; i < this.dataset.values.length; i++) {
             const v = this.dataset.values[i] || 0;
@@ -132,9 +138,11 @@ class PieSeries {
             const anim = this._sliceAnims.get(i);
             if (this._hiddenSlices && this._hiddenSlices.has(i) && !anim) continue;
             if (anim && anim.type === 'out') {
-                total += v * (1 - anim.progress);
+                const easedOut = _easeInCubic(anim.progress);
+                total += v * (1 - easedOut);
             } else if (anim && anim.type === 'in') {
-                total += v * anim.progress;
+                const easedIn = _easeOutCubic(anim.progress);
+                total += v * easedIn;
             } else {
                 total += v;
             }
@@ -163,16 +171,11 @@ class PieSeries {
             visibleCount++;
         }
 
-        // Easing functions
+        // Easing function for initial page-load animation only
         const easeOutBack = (t) => {
             const c1 = 1.70158;
             const c3 = c1 + 1;
             return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-        };
-        const easeInBack = (t) => {
-            const c1 = 1.70158;
-            const c3 = c1 + 1;
-            return c3 * t * t * t - c1 * t * t;
         };
         const animStyle = this.options.animationStyle || 'bounce';
 
@@ -193,9 +196,10 @@ class PieSeries {
             if (this._hiddenSlices && this._hiddenSlices.has(i) && !anim) continue;
 
             // Calculate effective fraction (animate for enter/exit)
+            // Use the SAME easing as in total calculation for perfect sync
             let effectiveValue = value;
-            if (isExiting) effectiveValue = value * (1 - anim.progress);
-            if (isEntering) effectiveValue = value * anim.progress;
+            if (isExiting) effectiveValue = value * (1 - _easeInCubic(anim.progress));
+            if (isEntering) effectiveValue = value * _easeOutCubic(anim.progress);
             
             const fraction = total > 0 ? effectiveValue / total : 0;
             const sliceAngle = fraction * Math.PI * 2;
@@ -210,32 +214,17 @@ class PieSeries {
             let drawRadius = radius, drawInner = innerRadius;
 
             if (isExiting) {
-                // Smooth out — no bounce/overshoot
-                const t = anim.progress * anim.progress; // easeInQuad
-                const midAngle = (angle + endAngle) / 2;
-                if (animStyle === 'bounce') {
-                    offsetX = Math.cos(midAngle) * dropDistance * t;
-                    offsetY = Math.sin(midAngle) * dropDistance * t;
-                } else {
-                    drawRadius = radius * (1 - t);
-                    drawInner = innerRadius * (1 - t);
-                }
-                sliceAlpha = Math.max(0, 1 - anim.progress * 1.2);
+                // Legend toggle out: smooth fade + angular shrink (in-place, no offset)
+                // Angular shrink is handled by effectiveValue above.
+                const t = _easeInCubic(anim.progress);
+                sliceAlpha = Math.max(0, 1 - t);
             } else if (isEntering) {
-                // Smooth in — no bounce/overshoot
-                const t = 1 - Math.pow(1 - anim.progress, 3); // easeOutCubic
-                const midAngle = (angle + endAngle) / 2;
-                if (animStyle === 'bounce') {
-                    offsetX = Math.cos(midAngle) * dropDistance * (1 - t);
-                    offsetY = Math.sin(midAngle) * dropDistance * (1 - t);
-                } else {
-                    // grow style: expand radius
-                    drawRadius = radius * anim.progress;
-                    drawInner = innerRadius * anim.progress;
-                }
-                sliceAlpha = Math.min(1, anim.progress * 1.5);
+                // Legend toggle in: smooth fade + angular grow (in-place, no offset)
+                // Angular grow is handled by effectiveValue above.
+                const t = _easeOutCubic(anim.progress);
+                sliceAlpha = t;
             } else if (progress < 1) {
-                // Initial page-load animation
+                // Initial page-load animation (bounce drop-in from outside)
                 const sliceStart = visibleIdx / visibleCount;
                 const sliceEnd = (visibleIdx + 1) / visibleCount;
                 const overlap = 0.3 / visibleCount;
@@ -266,9 +255,12 @@ class PieSeries {
             });
 
             // Skip active slice in first pass
-            const isActive = isHovered || (hlSlice >= 0 && hlSlice === i);
+            const hasActiveAnims = this._sliceAnims.size > 0;
+            const isActive = isHovered || (!hasActiveAnims && hlSlice >= 0 && hlSlice === i);
             if (!isActive && (sliceProgress > 0 || isExiting || isEntering)) {
-                ctx.globalAlpha = (hlSlice >= 0) ? 0.2 * sliceAlpha : sliceAlpha;
+                // Don't apply highlight dimming while toggle animations are running
+                const applyHighlight = hlSlice >= 0 && !hasActiveAnims;
+                ctx.globalAlpha = applyHighlight ? 0.2 * sliceAlpha : sliceAlpha;
                 this._drawSlice(ctx, cx, cy, drawRadius, drawInner, angle, endAngle, color, offsetX, offsetY);
                 ctx.globalAlpha = 1.0;
             }
@@ -307,8 +299,9 @@ class PieSeries {
         }
 
         // Second pass: draw active slice ON TOP with grown radius (no translate)
-        // Active = hovered via mouse OR highlighted via legend hover
-        const activeIdx = this._hoverIndex >= 0 ? this._hoverIndex : (hlSlice >= 0 ? hlSlice : -1);
+        // Active = hovered via mouse OR highlighted via legend hover (but NOT during toggle animations)
+        const hasAnims = this._sliceAnims.size > 0;
+        const activeIdx = this._hoverIndex >= 0 ? this._hoverIndex : (!hasAnims && hlSlice >= 0 ? hlSlice : -1);
         const growPx = 6;
 
         if (activeIdx >= 0 && progress >= 1) {

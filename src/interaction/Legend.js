@@ -76,6 +76,13 @@
             if (!itemEl) return;
             const index = parseInt(itemEl.getAttribute('data-index'), 10);
             if (isNaN(index)) return;
+
+            // Reset highlight on click to prevent flash/flicker during toggle animation.
+            // (mouseover fires alongside click, setting highlight which dims other slices)
+            if (this.chart.highlightSeries) {
+                this.chart.highlightSeries(-1);
+            }
+
             if (this.chart.toggleSeries) {
                 this.chart.toggleSeries(index);
             }

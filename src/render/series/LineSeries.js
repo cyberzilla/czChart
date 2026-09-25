@@ -14,9 +14,9 @@ class LineSeries {
         this.options = Object.assign({
             smooth: false,
             fill: false,
-            lineWidth: 2,
-            pointRadius: 4,
-            pointHoverRadius: 6,
+            lineWidth: 1.5,
+            pointRadius: 2.5,
+            pointHoverRadius: 8,
             visible: true
         }, options);
         this.dataset = null;
@@ -183,57 +183,61 @@ class LineSeries {
         ctx.lineCap = 'round';
         ctx.stroke(path);
 
-        // Draw normal (non-selected) points inside clip
+        ctx.restore(); // exit clip — line and fill are clipped, points are NOT
+        this._renderedPoints = points;
+
+        // Draw points OUTSIDE clip so edge points are not cut off
         if (this.options.pointRadius > 0) {
+            ctx.save();
             const color = this.dataset.color || '#000';
+            const bgColor = this._getBackgroundColor();
+
+            // Normal points: small subtle dots (skip selected, drawn separately)
             points.forEach(p => {
-                if (this._selectedPoints.has(p.index)) return; // draw later
+                if (this._selectedPoints.has(p.index)) return;
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, this.options.pointRadius, 0, Math.PI * 2);
                 ctx.fillStyle = color;
                 ctx.fill();
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 1.5;
+                ctx.strokeStyle = bgColor;
+                ctx.lineWidth = 1;
                 ctx.stroke();
             });
-        }
 
-        ctx.restore(); // exit clip
-        this._renderedPoints = points;
-
-        // Draw selected points OUTSIDE clip so ring is not cut off
-        if (this.options.pointRadius > 0 && this._selectedPoints.size > 0) {
-            ctx.save();
-            const color = this.dataset.color || '#000';
+            // Selected (toggled) points: hollow ring with center dot
             points.forEach(p => {
                 if (!this._selectedPoints.has(p.index)) return;
                 const r = this.options.pointHoverRadius;
 
-                // Outer ring
+                // Mask + hollow circle
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, r + 4, 0, Math.PI * 2);
-                ctx.strokeStyle = color;
-                ctx.lineWidth = 2;
-                ctx.stroke();
-
-                // White gap ring
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, r + 1, 0, Math.PI * 2);
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-
-                // Filled point
+                ctx.arc(p.x, p.y, r + 2, 0, Math.PI * 2);
+                ctx.fillStyle = bgColor;
+                ctx.fill();
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+                ctx.fillStyle = bgColor;
+                ctx.fill();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = this.options.lineWidth;
+                ctx.stroke();
+
+                // Center dot
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
                 ctx.fillStyle = color;
                 ctx.fill();
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 1.5;
-                ctx.stroke();
             });
             ctx.restore();
         }
+    }
+
+    /**
+     * Get chart background color from theme
+     * @returns {string} Background color
+     */
+    _getBackgroundColor() {
+        return (this.chart._theme && this.chart._theme.background) || '#ffffff';
     }
 
     /**
@@ -256,14 +260,32 @@ class LineSeries {
         const point = this._renderedPoints.find(p => p.index === activeIndex);
         if (!point) return;
 
+        const r = this.options.pointHoverRadius;
+        const color = this.dataset.color || '#000';
+        const bgColor = this._getBackgroundColor();
+
         ctx.save();
+
+        // Mask: covers line bleed at circle edge
         ctx.beginPath();
-        ctx.arc(point.x, point.y, this.options.pointHoverRadius, 0, Math.PI * 2);
-        ctx.fillStyle = this.dataset.color || '#000';
+        ctx.arc(point.x, point.y, r + 2, 0, Math.PI * 2);
+        ctx.fillStyle = bgColor;
         ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
+
+        // Hollow circle: bg fill + colored stroke (C3.js expand)
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = bgColor;
+        ctx.fill();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = this.options.lineWidth;
         ctx.stroke();
+
+        // Center dot
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
         ctx.restore();
     }
 

@@ -48,7 +48,9 @@
 
             // Draw vertical line
             if (this.options.mode === 'x' || this.options.mode === 'both') {
-                const x = crispCoord(snappedX !== undefined ? snappedX : mouseX);
+                // snappedX from hit test is already crisp (Math.round + 0.5),
+                // so use it directly to avoid double-rounding offset
+                const x = snappedX !== undefined ? snappedX : crispCoord(mouseX);
                 if (x >= plotArea.left && x <= plotArea.right) {
                     ctx.moveTo(x, plotArea.top);
                     ctx.lineTo(x, plotArea.bottom);

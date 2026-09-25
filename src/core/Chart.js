@@ -680,10 +680,40 @@
           }
         } else {
           // For other charts: draw hover effects on overlay canvas
+          // Find which series has the point closest to the mouse cursor (by Y distance)
+          // so we can draw it LAST (on top of overlapping points)
+          let closestSeries = null;
+          let closestDist = Infinity;
+          for (const s of this.series) {
+            if (!s.visible || !s.drawHover || !s._renderedPoints) continue;
+            const pt = s._renderedPoints.find(p => p.index === hitNearest.index);
+            if (pt) {
+              const dy = Math.abs(mouseY - pt.y);
+              if (dy < closestDist) {
+                closestDist = dy;
+                closestSeries = s;
+              }
+            }
+          }
+
+          // Draw non-closest series first, then closest series last (on top)
           this.series.forEach(s => {
-            if (!s.visible || !s.drawHover) return;
+            if (!s.visible || !s.drawHover || s === closestSeries) return;
             s.drawHover(overlayCtx, this.plotArea, this.scales.x, this.scales.y, hitNearest.index);
           });
+          if (closestSeries) {
+            // Erase the area around the closest point to guarantee it appears fully on top
+            const closestPt = closestSeries._renderedPoints.find(p => p.index === hitNearest.index);
+            if (closestPt) {
+              overlayCtx.save();
+              overlayCtx.globalCompositeOperation = 'destination-out';
+              overlayCtx.beginPath();
+              overlayCtx.arc(closestPt.x, closestPt.y, 12, 0, Math.PI * 2);
+              overlayCtx.fill();
+              overlayCtx.restore();
+            }
+            closestSeries.drawHover(overlayCtx, this.plotArea, this.scales.x, this.scales.y, hitNearest.index);
+          }
         }
 
         this._activeHit = hitNearest;
@@ -700,6 +730,16 @@
         }
         this._activeHit = null;
       }
+
+      // Cursor: pointer only when mouse is close to a data point
+      const canvas = this.renderer.getMainCanvas();
+      let isOverPoint = false;
+      if (hitNearest) {
+        const dx = mouseX - hitNearest.x;
+        const dy = mouseY - hitNearest.y;
+        isOverPoint = Math.sqrt(dx * dx + dy * dy) < 10;
+      }
+      canvas.style.cursor = isOverPoint ? 'pointer' : '';
 
       // Tooltip
       if (this.tooltip && this.options.tooltip.enabled) {
@@ -731,17 +771,18 @@
 
     /** @private */
     _handleClick(e) {
-      if (this._destroyed || !this._activeHit) return;
+      if (this._destroyed) return;
       
-      // Toggle point selection on line/area/radar charts
-      if (this.type === 'line' || this.type === 'area' || this.type === 'radar') {
-        const hit = this._activeHit;
-        // Find the exact series+point closest to click
-        const rect = this.renderer.mainCanvas.getBoundingClientRect();
-        const dpr = window.devicePixelRatio || 1;
-        const mx = (e.clientX - rect.left) * dpr;
-        const my = (e.clientY - rect.top) * dpr;
-        
+      // Toggle point selection on line/area/scatter/radar charts
+      if (this.type === 'line' || this.type === 'area' || this.type === 'scatter' || this.type === 'radar') {
+        const rect = this.renderer.getMainCanvas().getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+
+        // Use _activeHit if available, otherwise do our own hit test
+        const hit = this._activeHit || this.hitTester.findNearest(mx, my);
+        if (!hit) return;
+
         let bestSeries = null;
         let bestDist = Infinity;
         for (const s of this.series) {

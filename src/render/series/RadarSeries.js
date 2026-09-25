@@ -119,38 +119,57 @@ class RadarSeries {
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Draw data points
+        // Draw normal (non-selected) data points
+        const bgColor = this._getBackgroundColor();
         for (const pt of this._renderedPoints) {
-            const isSelected = this._selectedPoints.has(pt.index);
-            const r = isSelected ? 6 : 3;
-
-            if (isSelected) {
-                // Outer ring
-                ctx.beginPath();
-                ctx.arc(pt.x, pt.y, r + 4, 0, Math.PI * 2);
-                ctx.strokeStyle = color;
-                ctx.lineWidth = 2;
-                ctx.stroke();
-
-                // White gap ring
-                ctx.beginPath();
-                ctx.arc(pt.x, pt.y, r + 1, 0, Math.PI * 2);
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-            }
-
-            // Filled point
+            if (this._selectedPoints.has(pt.index)) continue;
             ctx.beginPath();
-            ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+            ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
             ctx.fillStyle = color;
             ctx.fill();
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = bgColor;
+            ctx.lineWidth = 1;
             ctx.stroke();
         }
 
         ctx.restore();
+
+        // Selected points — hollow ring + center dot
+        if (this._selectedPoints.size > 0) {
+            ctx.save();
+            const bgColor = this._getBackgroundColor();
+            for (const pt of this._renderedPoints) {
+                if (!this._selectedPoints.has(pt.index)) continue;
+                const r = 8;
+
+                // Mask + hollow circle
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, r + 2, 0, Math.PI * 2);
+                ctx.fillStyle = bgColor;
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+                ctx.fillStyle = bgColor;
+                ctx.fill();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Center dot
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+    }
+
+    /**
+     * Get chart background color from theme
+     */
+    _getBackgroundColor() {
+        return (this.chart._theme && this.chart._theme.background) || '#ffffff';
     }
 
     /**
@@ -169,14 +188,30 @@ class RadarSeries {
         const pt = this._renderedPoints.find(p => p.index === activeIndex);
         if (!pt) return;
 
+        const r = 8;
+        const color = this.dataset.color || '#000';
+        const bgColor = this._getBackgroundColor();
+
         ctx.save();
+
+        // Mask + hollow circle
         ctx.beginPath();
-        ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2);
-        ctx.fillStyle = this.dataset.color || '#000';
+        ctx.arc(pt.x, pt.y, r + 2, 0, Math.PI * 2);
+        ctx.fillStyle = bgColor;
         ctx.fill();
-        ctx.strokeStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = bgColor;
+        ctx.fill();
+        ctx.strokeStyle = color;
         ctx.lineWidth = 2;
         ctx.stroke();
+
+        // Center dot
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
         ctx.restore();
     }
 

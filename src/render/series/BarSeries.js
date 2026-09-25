@@ -183,7 +183,7 @@ class BarSeries {
             if (isInside) {
                 return {
                     index: bar.index,
-                    x: bar.x + bar.width / 2,
+                    x: Math.round(bar.x + bar.width / 2) + 0.5,
                     y: bar.value >= 0 ? bar.y : bar.y + bar.height,
                     value: bar.value,
                     seriesName: this.dataset.name,

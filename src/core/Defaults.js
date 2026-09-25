@@ -55,9 +55,9 @@ const DEFAULTS = {
         mode: 'x'  // x, y, xy
     },
     series: {
-        lineWidth: 2,
-        pointRadius: 0,
-        pointHoverRadius: 5,
+        lineWidth: 1.5,
+        pointRadius: 2.5,
+        pointHoverRadius: 8,
         smooth: false,
         fill: false,
         fillOpacity: 0.15

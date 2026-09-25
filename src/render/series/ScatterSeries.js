@@ -17,6 +17,7 @@ class ScatterSeries {
         }, options);
         this.dataset = null;
         this.visible = this.options.visible;
+        this._selectedPoints = new Set();
     }
 
     setData(dataset) {
@@ -79,11 +80,11 @@ class ScatterSeries {
     draw(ctx, plotArea, xScale, yScale, progress) {
         if (!this.dataset || !this.visible || !this.dataset.points) return;
 
+        const color = this.dataset.color || '#000';
+        const bgColor = this._getBackgroundColor();
+
         ctx.save();
         ctx.globalAlpha = progress; // Fade in animation
-        ctx.fillStyle = this.dataset.color || '#000';
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1.5;
 
         this._renderedPoints = [];
 
@@ -99,19 +100,68 @@ class ScatterSeries {
             }
             r *= progress; // Scale up animation
 
-            this._drawShape(ctx, this.options.pointShape, px, py, Math.max(0.1, r));
-
             this._renderedPoints.push({
-                index: i,
-                x: px,
-                y: py,
-                valueX: pt.x,
-                valueY: pt.y,
-                r: r
+                index: i, x: px, y: py,
+                valueX: pt.x, valueY: pt.y, r: r
             });
+
+            // Skip selected points in first pass
+            if (this._selectedPoints.has(i)) return;
+
+            ctx.fillStyle = color;
+            ctx.strokeStyle = bgColor;
+            ctx.lineWidth = 1.5;
+            this._drawShape(ctx, this.options.pointShape, px, py, Math.max(0.1, r));
         });
 
         ctx.restore();
+
+        // Second pass: selected points — hollow ring + center dot
+        if (this._selectedPoints.size > 0) {
+            ctx.save();
+            for (const pt of this._renderedPoints) {
+                if (!this._selectedPoints.has(pt.index)) continue;
+                const r = Math.max(3, pt.r * 1.2);
+
+                // Mask + hollow circle
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, r + 2, 0, Math.PI * 2);
+                ctx.fillStyle = bgColor;
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+                ctx.fillStyle = bgColor;
+                ctx.fill();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                // Center dot
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+    }
+
+    /**
+     * Toggle a data point selection
+     */
+    togglePoint(index) {
+        if (this._selectedPoints.has(index)) {
+            this._selectedPoints.delete(index);
+        } else {
+            this._selectedPoints.add(index);
+        }
+    }
+
+    /**
+     * Get chart background color from theme
+     */
+    _getBackgroundColor() {
+        return (this.chart._theme && this.chart._theme.background) || '#ffffff';
     }
 
     drawHover(ctx, plotArea, xScale, yScale, activeIndex) {
@@ -119,14 +169,30 @@ class ScatterSeries {
         const pt = this._renderedPoints.find(p => p.index === activeIndex);
         if (!pt) return;
 
-        ctx.save();
-        ctx.shadowColor = this.dataset.color || '#000';
-        ctx.shadowBlur = 10;
-        ctx.fillStyle = this.dataset.color || '#000';
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
+        const r = Math.max(3, pt.r * 1.2);
+        const color = this.dataset.color || '#000';
+        const bgColor = this._getBackgroundColor();
 
-        this._drawShape(ctx, this.options.pointShape, pt.x, pt.y, pt.r * 1.5);
+        ctx.save();
+
+        // Mask + hollow circle
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, r + 2, 0, Math.PI * 2);
+        ctx.fillStyle = bgColor;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = bgColor;
+        ctx.fill();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Center dot
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
         ctx.restore();
     }
 
