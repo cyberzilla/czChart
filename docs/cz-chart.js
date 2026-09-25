@@ -2,7 +2,7 @@
  * czChart v1.0.0 — Lightweight, Data-Driven Chart Library
  * (c) 2026 CyberZilla
  * Released under the MIT License
- * Built: 2026-09-25T10:47:12.473Z
+ * Built: 2026-09-25T10:58:56.165Z
  */
 
 (function(global) {
@@ -2433,6 +2433,10 @@ class PieSeries {
         ctx.rect(plotArea.left - 5, plotArea.top - 5, plotArea.width + 10, plotArea.height + 10);
         ctx.clip();
 
+        // Animated radius: grow from center outward
+        const animRadius = radius * progress;
+        const animInner = innerRadius * progress;
+
         // First pass: draw non-hovered slices
         let angle = startAngleRad;
         const hlSlice = this._highlightSlice !== undefined ? this._highlightSlice : -1;
@@ -2443,7 +2447,7 @@ class PieSeries {
             if (this._hiddenSlices && this._hiddenSlices.has(i)) continue;
 
             const fraction = value / total;
-            const sliceAngle = fraction * Math.PI * 2 * progress;
+            const sliceAngle = fraction * Math.PI * 2;
             const endAngle = angle + sliceAngle;
             const color = this._colors[i] || '#3b82f6';
             const isHovered = (i === this._hoverIndex);
@@ -2451,19 +2455,19 @@ class PieSeries {
             this._renderedSlices.push({
                 index: i,
                 cx, cy,
-                radius, innerRadius,
+                radius: animRadius, innerRadius: animInner,
                 startAngleRad: angle,
                 endAngleRad: endAngle,
                 value, fraction, color,
                 label: labels[i] || ('Item ' + (i + 1))
             });
 
-            // Skip active slice in first pass — it will be drawn exploded in second pass
+            // Skip active slice in first pass — it will be drawn grown in second pass
             const isActive = isHovered || (hlSlice >= 0 && hlSlice === i);
             if (!isActive) {
                 // Apply highlight dimming per slice
                 ctx.globalAlpha = (hlSlice >= 0) ? 0.2 : 1.0;
-                this._drawSlice(ctx, cx, cy, radius, innerRadius, angle, endAngle, color, 0, 0);
+                this._drawSlice(ctx, cx, cy, animRadius, animInner, angle, endAngle, color, 0, 0);
                 ctx.globalAlpha = 1.0;
             }
 
@@ -2504,7 +2508,7 @@ class PieSeries {
         const activeIdx = this._hoverIndex >= 0 ? this._hoverIndex : (hlSlice >= 0 ? hlSlice : -1);
         const growPx = 6;
 
-        if (activeIdx >= 0) {
+        if (activeIdx >= 0 && progress >= 1) {
             const hSlice = this._renderedSlices.find(s => s.index === activeIdx);
             if (hSlice) {
                 // Shadow
@@ -2535,7 +2539,7 @@ class PieSeries {
             }
         }
 
-        // Draw labels
+        // Draw labels only when fully grown
         if (this.options.showLabels && progress >= 1) {
             this._drawLabels(ctx, cx, cy, radius, innerRadius, total, activeIdx, growPx);
         }
