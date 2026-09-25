@@ -20,7 +20,8 @@ class PieSeries {
         this.visible = this.options.visible;
         this._renderedSlices = [];
         this._colors = [];
-        this._hoverIndex = -1;  // Track which slice is hovered
+        this._hoverIndex = -1;
+        this._sliceAnims = new Map(); // index → { type: 'in'|'out', progress: 0-1 }
     }
 
     setData(dataset) {
@@ -45,14 +46,19 @@ class PieSeries {
     getLegendItems() {
         if (!this.dataset || !this.dataset.values) return [];
         const labels = this.chart.normalizedData ? this.chart.normalizedData.labels : [];
-        return this.dataset.values.map((val, i) => ({
-            name: labels[i] || ('Item ' + (i + 1)),
-            color: this._colors[i] || '#000',
-            visible: !(this._hiddenSlices && this._hiddenSlices.has(i)),
-            index: i,
-            datasetIndex: i,
-            series: this
-        }));
+        return this.dataset.values.map((val, i) => {
+            const isHidden = this._hiddenSlices && this._hiddenSlices.has(i);
+            const anim = this._sliceAnims ? this._sliceAnims.get(i) : null;
+            const isExiting = anim && anim.type === 'out';
+            return {
+                name: labels[i] || ('Item ' + (i + 1)),
+                color: this._colors[i] || '#000',
+                visible: !isHidden && !isExiting,
+                index: i,
+                datasetIndex: i,
+                series: this
+            };
+        });
     }
 
     getBounds() {
@@ -66,6 +72,47 @@ class PieSeries {
         this._hoverIndex = index;
     }
 
+    /**
+     * Animate a slice in or out (toggle with animation)
+     * @param {number} index - Slice index
+     * @param {Function} onComplete - Callback when animation finishes
+     */
+    animateSliceToggle(index, onComplete) {
+        if (!this._hiddenSlices) this._hiddenSlices = new Set();
+        const isHiding = !this._hiddenSlices.has(index);
+        const duration = 350; // ms
+        const startTime = performance.now();
+
+        // If showing, remove from hidden immediately so it draws during animation
+        if (!isHiding) {
+            this._hiddenSlices.delete(index);
+        }
+
+        this._sliceAnims.set(index, { type: isHiding ? 'out' : 'in', progress: 0 });
+
+        const tick = (now) => {
+            const elapsed = now - startTime;
+            const t = Math.min(1, elapsed / duration);
+            this._sliceAnims.set(index, { type: isHiding ? 'out' : 'in', progress: t });
+
+            // Re-render
+            this.chart._render(false);
+
+            if (t < 1) {
+                requestAnimationFrame(tick);
+            } else {
+                // Animation complete
+                this._sliceAnims.delete(index);
+                if (isHiding) {
+                    this._hiddenSlices.add(index);
+                }
+                if (onComplete) onComplete();
+                this.chart._render(false);
+            }
+        };
+        requestAnimationFrame(tick);
+    }
+
     draw(ctx, plotArea, xScale, yScale, progress) {
         if (!this.dataset || !this.visible || !this.dataset.values || this.dataset.values.length === 0) return;
 
@@ -76,13 +123,24 @@ class PieSeries {
 
         let startAngleRad = (this.options.startAngle * Math.PI) / 180;
 
-        // Calculate total excluding hidden slices
+        // Calculate total: include animating-out slices proportionally
         let total = 0;
         for (let i = 0; i < this.dataset.values.length; i++) {
+            const v = this.dataset.values[i] || 0;
+            if (v <= 0) continue;
+            const anim = this._sliceAnims.get(i);
             if (this._hiddenSlices && this._hiddenSlices.has(i)) continue;
-            total += this.dataset.values[i] || 0;
+            if (anim && anim.type === 'out') {
+                // Shrinking out: reduce contribution to total
+                total += v * (1 - anim.progress);
+            } else {
+                total += v;
+            }
         }
-        if (total === 0) return;
+        if (total === 0) {
+            ctx.restore();
+            return;
+        }
 
         this._renderedSlices = [];
         const values = this.dataset.values;
@@ -96,19 +154,24 @@ class PieSeries {
         ctx.rect(plotArea.left - 10, plotArea.top - 10, plotArea.width + 20, plotArea.height + 20);
         ctx.clip();
 
-        // Count visible slices for sequential animation
+        // Count visible slices for initial animation
         let visibleCount = 0;
         for (let i = 0; i < values.length; i++) {
             if (!values[i] || values[i] <= 0) continue;
-            if (this._hiddenSlices && this._hiddenSlices.has(i)) continue;
+            if (this._hiddenSlices && this._hiddenSlices.has(i) && !this._sliceAnims.has(i)) continue;
             visibleCount++;
         }
 
-        // EaseOutBack for bounce effect
+        // Easing functions
         const easeOutBack = (t) => {
             const c1 = 1.70158;
             const c3 = c1 + 1;
             return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+        };
+        const easeInBack = (t) => {
+            const c1 = 1.70158;
+            const c3 = c1 + 1;
+            return c3 * t * t * t - c1 * t * t;
         };
 
         // First pass: draw non-hovered slices
@@ -119,32 +182,57 @@ class PieSeries {
         for (let i = 0; i < values.length; i++) {
             const value = values[i];
             if (!value || value <= 0) continue;
-            if (this._hiddenSlices && this._hiddenSlices.has(i)) continue;
+            
+            const anim = this._sliceAnims.get(i);
+            const isExiting = anim && anim.type === 'out';
+            const isEntering = anim && anim.type === 'in';
+            
+            // Skip fully hidden (not animating) slices
+            if (this._hiddenSlices && this._hiddenSlices.has(i) && !anim) continue;
 
-            const fraction = value / total;
+            // Calculate effective fraction (shrink for exiting slices)
+            let effectiveValue = value;
+            if (isExiting) effectiveValue = value * (1 - anim.progress);
+            
+            const fraction = effectiveValue / total;
             const sliceAngle = fraction * Math.PI * 2;
             const endAngle = angle + sliceAngle;
             const color = this._colors[i] || '#3b82f6';
             const isHovered = (i === this._hoverIndex);
 
-            // Sequential timing: each slice gets its own animation window
+            // Determine animation state
             let sliceProgress = 1;
-            if (progress < 1) {
+            const dropDistance = radius * 0.4;
+            let offsetX = 0, offsetY = 0, sliceAlpha = 1;
+
+            if (isExiting) {
+                // Slide out animation (reverse)
+                const t = easeInBack(anim.progress);
+                const midAngle = (angle + endAngle) / 2;
+                offsetX = Math.cos(midAngle) * dropDistance * t;
+                offsetY = Math.sin(midAngle) * dropDistance * t;
+                sliceAlpha = Math.max(0, 1 - anim.progress * 1.5);
+            } else if (isEntering) {
+                // Slide in animation
+                const t = easeOutBack(anim.progress);
+                const midAngle = (angle + endAngle) / 2;
+                offsetX = Math.cos(midAngle) * dropDistance * (1 - t);
+                offsetY = Math.sin(midAngle) * dropDistance * (1 - t);
+                sliceAlpha = Math.min(1, anim.progress * 1.5);
+            } else if (progress < 1) {
+                // Initial page-load animation
                 const sliceStart = visibleIdx / visibleCount;
                 const sliceEnd = (visibleIdx + 1) / visibleCount;
-                const overlap = 0.3 / visibleCount; // slight overlap between slices
+                const overlap = 0.3 / visibleCount;
                 const adjustedStart = Math.max(0, sliceStart - overlap);
-                const window = sliceEnd - adjustedStart;
-                const localT = (progress - adjustedStart) / window;
+                const wnd = sliceEnd - adjustedStart;
+                const localT = (progress - adjustedStart) / wnd;
                 sliceProgress = localT <= 0 ? 0 : localT >= 1 ? 1 : easeOutBack(Math.min(1, localT));
+                const midAngle = (angle + endAngle) / 2;
+                offsetX = Math.cos(midAngle) * dropDistance * (1 - sliceProgress);
+                offsetY = Math.sin(midAngle) * dropDistance * (1 - sliceProgress);
+                sliceAlpha = Math.min(1, sliceProgress * 1.5);
             }
-
-            // Slice drops in: starts offset outward, slides to center
-            const dropDistance = radius * 0.4;
-            const midAngle = (angle + endAngle) / 2;
-            const offsetX = Math.cos(midAngle) * dropDistance * (1 - sliceProgress);
-            const offsetY = Math.sin(midAngle) * dropDistance * (1 - sliceProgress);
-            const sliceAlpha = Math.min(1, sliceProgress * 1.5);
 
             this._renderedSlices.push({
                 index: i,
@@ -158,7 +246,7 @@ class PieSeries {
 
             // Skip active slice in first pass
             const isActive = isHovered || (hlSlice >= 0 && hlSlice === i);
-            if (!isActive && sliceProgress > 0) {
+            if (!isActive && (sliceProgress > 0 || isExiting || isEntering)) {
                 ctx.globalAlpha = (hlSlice >= 0) ? 0.2 * sliceAlpha : sliceAlpha;
                 this._drawSlice(ctx, cx, cy, radius, innerRadius, angle, endAngle, color, offsetX, offsetY);
                 ctx.globalAlpha = 1.0;

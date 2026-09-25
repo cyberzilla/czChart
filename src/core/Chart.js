@@ -791,18 +791,21 @@
      * @param {number} index - Dataset index
      */
     toggleSeries(index) {
-      // For pie/donut, toggle individual data points (not series)
+      // For pie/donut, toggle individual data points with animation
       if ((this.type === 'pie' || this.type === 'donut') && this.series[0]) {
         const pie = this.series[0];
         if (!pie._hiddenSlices) pie._hiddenSlices = new Set();
-        if (pie._hiddenSlices.has(index)) {
-          pie._hiddenSlices.delete(index);
-        } else {
-          pie._hiddenSlices.add(index);
-        }
+        const wasHidden = pie._hiddenSlices.has(index);
+        
+        // Update legend immediately for responsive feel
         this._updateLegend();
-        this._render(true);
-        this.emit('legendToggle', { index, visible: !pie._hiddenSlices.has(index) });
+        
+        // Animate the slice in/out
+        pie.animateSliceToggle(index, () => {
+          this._updateLegend();
+        });
+        
+        this.emit('legendToggle', { index, visible: wasHidden });
         return;
       }
 
