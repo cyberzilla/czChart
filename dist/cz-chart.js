@@ -2,7 +2,7 @@
  * czChart v1.0.0 — Lightweight, Data-Driven Chart Library
  * (c) 2026 CyberZilla
  * Released under the MIT License
- * Built: 2026-09-25T10:44:54.066Z
+ * Built: 2026-09-25T10:47:12.473Z
  */
 
 (function(global) {
@@ -315,6 +315,48 @@ window.CZ.Color = {
         gradient.addColorStop(0, window.CZ.Color.withAlpha(color, startAlpha));
         gradient.addColorStop(1, window.CZ.Color.withAlpha(color, endAlpha));
         return gradient;
+    },
+
+    /**
+     * Generate a vibrant random color
+     * @param {number} [alpha=1] - Alpha value 0-1
+     * @returns {string} color string
+     */
+    randomColor(alpha) {
+        var h = Math.floor(Math.random() * 360);
+        var s = 60 + Math.floor(Math.random() * 30); // 60-90%
+        var l = 45 + Math.floor(Math.random() * 20); // 45-65%
+        // Convert HSL to RGB
+        var c = (1 - Math.abs(2 * l / 100 - 1)) * s / 100;
+        var x = c * (1 - Math.abs((h / 60) % 2 - 1));
+        var m = l / 100 - c / 2;
+        var r1, g1, b1;
+        if (h < 60)       { r1 = c; g1 = x; b1 = 0; }
+        else if (h < 120) { r1 = x; g1 = c; b1 = 0; }
+        else if (h < 180) { r1 = 0; g1 = c; b1 = x; }
+        else if (h < 240) { r1 = 0; g1 = x; b1 = c; }
+        else if (h < 300) { r1 = x; g1 = 0; b1 = c; }
+        else              { r1 = c; g1 = 0; b1 = x; }
+        var r = Math.round((r1 + m) * 255);
+        var g = Math.round((g1 + m) * 255);
+        var b = Math.round((b1 + m) * 255);
+        if (alpha !== undefined && alpha < 1) {
+            return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+        }
+        return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    },
+
+    /**
+     * Resolve color value — converts 'random' to actual color
+     * @param {string} color
+     * @param {number} [alpha] - Optional alpha for random colors
+     * @returns {string} resolved color
+     */
+    resolve(color, alpha) {
+        if (typeof color === 'string' && color.toLowerCase() === 'random') {
+            return window.CZ.Color.randomColor(alpha);
+        }
+        return color;
     }
 };
 
@@ -809,12 +851,17 @@ window.CZ.State = State;
           }
 
           yKeys.forEach((yKey, index) => {
-            const color = (options.colors && options.colors[index]) || 
+            let color = (options.colors && options.colors[index]) || 
                           (CZ.ColorUtils ? CZ.ColorUtils.getSeriesColor(index) : '#000000');
+            // Resolve 'random' keyword
+            if (CZ.ColorUtils && CZ.ColorUtils.resolve) color = CZ.ColorUtils.resolve(color);
             
             // Extract per-point colors from data if 'color' key exists
             const hasPointColors = data.some(d => d.color !== undefined);
-            const pointColors = hasPointColors ? data.map(d => d.color || null) : null;
+            const pointColors = hasPointColors ? data.map(d => {
+              if (!d.color) return null;
+              return (CZ.ColorUtils && CZ.ColorUtils.resolve) ? CZ.ColorUtils.resolve(d.color) : d.color;
+            }) : null;
 
             datasets.push({
               name: (options.series && options.series[index]) || yKey,

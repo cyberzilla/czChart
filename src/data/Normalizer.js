@@ -50,12 +50,17 @@
           }
 
           yKeys.forEach((yKey, index) => {
-            const color = (options.colors && options.colors[index]) || 
+            let color = (options.colors && options.colors[index]) || 
                           (CZ.ColorUtils ? CZ.ColorUtils.getSeriesColor(index) : '#000000');
+            // Resolve 'random' keyword
+            if (CZ.ColorUtils && CZ.ColorUtils.resolve) color = CZ.ColorUtils.resolve(color);
             
             // Extract per-point colors from data if 'color' key exists
             const hasPointColors = data.some(d => d.color !== undefined);
-            const pointColors = hasPointColors ? data.map(d => d.color || null) : null;
+            const pointColors = hasPointColors ? data.map(d => {
+              if (!d.color) return null;
+              return (CZ.ColorUtils && CZ.ColorUtils.resolve) ? CZ.ColorUtils.resolve(d.color) : d.color;
+            }) : null;
 
             datasets.push({
               name: (options.series && options.series[index]) || yKey,
