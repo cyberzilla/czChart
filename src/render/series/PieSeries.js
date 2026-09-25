@@ -84,7 +84,7 @@ class PieSeries {
         this._renderedSlices = [];
         const values = this.dataset.values;
         const labels = this.chart.normalizedData ? this.chart.normalizedData.labels : [];
-        const explodeOffset = 12;
+        const explodeOffset = 6;
 
         ctx.save();
         
@@ -166,13 +166,9 @@ class PieSeries {
         if (activeIdx >= 0) {
             const hSlice = this._renderedSlices.find(s => s.index === activeIdx);
             if (hSlice) {
-                // Proportional offset: smaller slices get full offset, larger slices less
-                const dynamicOffset = explodeOffset * Math.pow(1 - hSlice.fraction, 0.4);
-                const clampedOffset = Math.max(5, Math.min(explodeOffset, dynamicOffset));
-
                 const midAngle = (hSlice.startAngleRad + hSlice.endAngleRad) / 2;
-                const dx = Math.cos(midAngle) * clampedOffset;
-                const dy = Math.sin(midAngle) * clampedOffset;
+                const dx = Math.cos(midAngle) * explodeOffset;
+                const dy = Math.sin(midAngle) * explodeOffset;
 
                 // Shadow
                 ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
