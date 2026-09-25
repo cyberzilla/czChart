@@ -118,10 +118,11 @@ class PieSeries {
                 label: labels[i] || ('Item ' + (i + 1))
             });
 
-            // Skip hovered slice in first pass (draw it on top later)
-            if (!isHovered) {
+            // Skip active slice in first pass — it will be drawn exploded in second pass
+            const isActive = isHovered || (hlSlice >= 0 && hlSlice === i);
+            if (!isActive) {
                 // Apply highlight dimming per slice
-                ctx.globalAlpha = (hlSlice >= 0 && hlSlice !== i) ? 0.2 : 1.0;
+                ctx.globalAlpha = (hlSlice >= 0) ? 0.2 : 1.0;
                 this._drawSlice(ctx, cx, cy, radius, innerRadius, angle, endAngle, color, 0, 0);
                 ctx.globalAlpha = 1.0;
             }

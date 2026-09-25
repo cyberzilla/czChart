@@ -2,7 +2,7 @@
  * czChart v1.0.0 — Lightweight, Data-Driven Chart Library
  * (c) 2026 CyberZilla
  * Released under the MIT License
- * Built: 2026-09-25T10:22:52.346Z
+ * Built: 2026-09-25T10:27:27.240Z
  */
 
 (function(global) {
@@ -2377,10 +2377,11 @@ class PieSeries {
                 label: labels[i] || ('Item ' + (i + 1))
             });
 
-            // Skip hovered slice in first pass (draw it on top later)
-            if (!isHovered) {
+            // Skip active slice in first pass — it will be drawn exploded in second pass
+            const isActive = isHovered || (hlSlice >= 0 && hlSlice === i);
+            if (!isActive) {
                 // Apply highlight dimming per slice
-                ctx.globalAlpha = (hlSlice >= 0 && hlSlice !== i) ? 0.2 : 1.0;
+                ctx.globalAlpha = (hlSlice >= 0) ? 0.2 : 1.0;
                 this._drawSlice(ctx, cx, cy, radius, innerRadius, angle, endAngle, color, 0, 0);
                 ctx.globalAlpha = 1.0;
             }
