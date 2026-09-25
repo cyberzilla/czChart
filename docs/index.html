@@ -229,6 +229,7 @@
         ],
         x: 'month',
         y: ['revenue', 'cost', 'profit'],
+        colors: ['#3b82f6', '#ef4444', '#10b981'],
         yAxis: { title: 'Amount (USD)' },
         series: { smooth: true, pointRadius: 3 }
     });
@@ -297,11 +298,11 @@
     czChart.create('#chart-pie', {
         type: 'pie',
         data: [
-            { browser: 'Chrome', share: 64 },
-            { browser: 'Safari', share: 19 },
-            { browser: 'Firefox', share: 4 },
-            { browser: 'Edge', share: 4 },
-            { browser: 'Others', share: 9 }
+            { browser: 'Chrome', share: 64, color: '#4285F4' },
+            { browser: 'Safari', share: 19, color: '#FF6384' },
+            { browser: 'Firefox', share: 4, color: '#FF9F40' },
+            { browser: 'Edge', share: 4, color: '#36A2EB' },
+            { browser: 'Others', share: 9, color: '#9966FFCC' }
         ],
         x: 'browser',
         y: 'share'

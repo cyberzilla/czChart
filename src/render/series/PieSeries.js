@@ -28,7 +28,10 @@ class PieSeries {
         this._colors = [];
         if (dataset && dataset.values) {
             for (let i = 0; i < dataset.values.length; i++) {
-                if (dataset.colors && dataset.colors[i]) {
+                if (dataset.pointColors && dataset.pointColors[i]) {
+                    // Per-data-point color from data (e.g. { color: '#ff0000cc' })
+                    this._colors.push(dataset.pointColors[i]);
+                } else if (dataset.colors && dataset.colors[i]) {
                     this._colors.push(dataset.colors[i]);
                 } else if (window.CZ && window.CZ.ColorUtils) {
                     this._colors.push(window.CZ.ColorUtils.getSeriesColor(i));

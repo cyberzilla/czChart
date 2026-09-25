@@ -52,10 +52,16 @@
           yKeys.forEach((yKey, index) => {
             const color = (options.colors && options.colors[index]) || 
                           (CZ.ColorUtils ? CZ.ColorUtils.getSeriesColor(index) : '#000000');
+            
+            // Extract per-point colors from data if 'color' key exists
+            const hasPointColors = data.some(d => d.color !== undefined);
+            const pointColors = hasPointColors ? data.map(d => d.color || null) : null;
+
             datasets.push({
               name: (options.series && options.series[index]) || yKey,
               values: data.map(d => parseFloat(d[yKey]) || 0),
               color: color,
+              pointColors: pointColors,
               ...options.seriesOptions
             });
           });

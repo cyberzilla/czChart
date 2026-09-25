@@ -2,7 +2,7 @@
  * czChart v1.0.0 — Lightweight, Data-Driven Chart Library
  * (c) 2026 CyberZilla
  * Released under the MIT License
- * Built: 2026-09-25T10:39:55.875Z
+ * Built: 2026-09-25T10:44:54.066Z
  */
 
 (function(global) {
@@ -197,77 +197,111 @@ window.CZ.Color = {
     DEFAULT_PALETTE,
 
     /**
-     * Convert HEX to RGB
-     * @param {string} hex 
-     * @returns {object} {r, g, b}
+     * Parse any color string to {r, g, b, a}
+     * Supports: #RGB, #RRGGBB, #RRGGBBAA, rgb(), rgba()
+     * @param {string} color
+     * @returns {object} {r, g, b, a}
+     */
+    parse(color) {
+        if (!color || typeof color !== 'string') return { r: 0, g: 0, b: 0, a: 1 };
+
+        color = color.trim();
+
+        // rgba(r, g, b, a) or rgb(r, g, b)
+        const rgbaMatch = color.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?\s*\)$/);
+        if (rgbaMatch) {
+            return {
+                r: parseInt(rgbaMatch[1]),
+                g: parseInt(rgbaMatch[2]),
+                b: parseInt(rgbaMatch[3]),
+                a: rgbaMatch[4] !== undefined ? parseFloat(rgbaMatch[4]) : 1
+            };
+        }
+
+        // Hex
+        let hex = color.replace(/^#/, '');
+
+        // #RGB → #RRGGBB
+        if (hex.length === 3) {
+            hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+        }
+        // #RGBA → #RRGGBBAA
+        if (hex.length === 4) {
+            hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
+        }
+
+        const r = parseInt(hex.substring(0, 2), 16) || 0;
+        const g = parseInt(hex.substring(2, 4), 16) || 0;
+        const b = parseInt(hex.substring(4, 6), 16) || 0;
+        const a = hex.length === 8 ? parseInt(hex.substring(6, 8), 16) / 255 : 1;
+
+        return { r, g, b, a };
+    },
+
+    /**
+     * Convert {r,g,b,a} to CSS string
+     * @param {object} rgba
+     * @returns {string}
+     */
+    toCss(rgba) {
+        if (rgba.a < 1) {
+            return 'rgba(' + rgba.r + ',' + rgba.g + ',' + rgba.b + ',' + Math.round(rgba.a * 1000) / 1000 + ')';
+        }
+        return '#' + ((1 << 24) + (rgba.r << 16) + (rgba.g << 8) + rgba.b).toString(16).slice(1);
+    },
+
+    /**
+     * Convert HEX to RGB (backwards compat)
      */
     hexToRgb(hex) {
-        hex = hex.replace(/^#/, '');
-        if (hex.length === 3) {
-            hex = hex.split('').map(c => c + c).join('');
-        }
-        const num = parseInt(hex, 16);
-        return {
-            r: (num >> 16) & 255,
-            g: (num >> 8) & 255,
-            b: num & 255
-        };
+        const c = window.CZ.Color.parse(hex);
+        return { r: c.r, g: c.g, b: c.b };
     },
 
     /**
      * Convert RGB to HEX
-     * @param {number} r 
-     * @param {number} g 
-     * @param {number} b 
-     * @returns {string} hex color
      */
     rgbToHex(r, g, b) {
         return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
     },
 
     /**
-     * Add alpha to HEX color
-     * @param {string} hexColor 
-     * @param {number} alpha 
-     * @returns {string} rgba color
+     * Set alpha on any color string. Preserves original RGB.
+     * @param {string} color - Any supported color format
+     * @param {number} alpha - 0 to 1
+     * @returns {string} rgba() string
      */
-    withAlpha(hexColor, alpha) {
-        const rgb = window.CZ.Color.hexToRgb(hexColor);
-        return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+    withAlpha(color, alpha) {
+        const c = window.CZ.Color.parse(color);
+        return 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',' + alpha + ')';
     },
 
     /**
-     * Lighten a HEX color
-     * @param {string} hexColor 
-     * @param {number} amount (0-1)
-     * @returns {string} hex color
+     * Lighten a color
      */
-    lighten(hexColor, amount) {
-        const rgb = window.CZ.Color.hexToRgb(hexColor);
-        const r = Math.round(window.CZ.Math.clamp(rgb.r + (255 - rgb.r) * amount, 0, 255));
-        const g = Math.round(window.CZ.Math.clamp(rgb.g + (255 - rgb.g) * amount, 0, 255));
-        const b = Math.round(window.CZ.Math.clamp(rgb.b + (255 - rgb.b) * amount, 0, 255));
+    lighten(color, amount) {
+        const c = window.CZ.Color.parse(color);
+        const r = Math.round(Math.min(255, c.r + (255 - c.r) * amount));
+        const g = Math.round(Math.min(255, c.g + (255 - c.g) * amount));
+        const b = Math.round(Math.min(255, c.b + (255 - c.b) * amount));
+        if (c.a < 1) return 'rgba(' + r + ',' + g + ',' + b + ',' + c.a + ')';
         return window.CZ.Color.rgbToHex(r, g, b);
     },
 
     /**
-     * Darken a HEX color
-     * @param {string} hexColor 
-     * @param {number} amount (0-1)
-     * @returns {string} hex color
+     * Darken a color
      */
-    darken(hexColor, amount) {
-        const rgb = window.CZ.Color.hexToRgb(hexColor);
-        const r = Math.round(window.CZ.Math.clamp(rgb.r * (1 - amount), 0, 255));
-        const g = Math.round(window.CZ.Math.clamp(rgb.g * (1 - amount), 0, 255));
-        const b = Math.round(window.CZ.Math.clamp(rgb.b * (1 - amount), 0, 255));
+    darken(color, amount) {
+        const c = window.CZ.Color.parse(color);
+        const r = Math.round(Math.max(0, c.r * (1 - amount)));
+        const g = Math.round(Math.max(0, c.g * (1 - amount)));
+        const b = Math.round(Math.max(0, c.b * (1 - amount)));
+        if (c.a < 1) return 'rgba(' + r + ',' + g + ',' + b + ',' + c.a + ')';
         return window.CZ.Color.rgbToHex(r, g, b);
     },
 
     /**
      * Get a series color from default palette
-     * @param {number} index 
-     * @returns {string} hex color
      */
     getSeriesColor(index) {
         return DEFAULT_PALETTE[index % DEFAULT_PALETTE.length];
@@ -275,15 +309,6 @@ window.CZ.Color = {
 
     /**
      * Generate canvas linear gradient
-     * @param {CanvasRenderingContext2D} ctx 
-     * @param {number} x1 
-     * @param {number} y1 
-     * @param {number} x2 
-     * @param {number} y2 
-     * @param {string} color 
-     * @param {number} startAlpha 
-     * @param {number} endAlpha 
-     * @returns {CanvasGradient}
      */
     generateGradient(ctx, x1, y1, x2, y2, color, startAlpha, endAlpha) {
         const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
@@ -293,7 +318,7 @@ window.CZ.Color = {
     }
 };
 
-// Alias for consumer modules that reference CZ.ColorUtils
+// Alias
 window.CZ.ColorUtils = window.CZ.Color;
 
 
@@ -786,10 +811,16 @@ window.CZ.State = State;
           yKeys.forEach((yKey, index) => {
             const color = (options.colors && options.colors[index]) || 
                           (CZ.ColorUtils ? CZ.ColorUtils.getSeriesColor(index) : '#000000');
+            
+            // Extract per-point colors from data if 'color' key exists
+            const hasPointColors = data.some(d => d.color !== undefined);
+            const pointColors = hasPointColors ? data.map(d => d.color || null) : null;
+
             datasets.push({
               name: (options.series && options.series[index]) || yKey,
               values: data.map(d => parseFloat(d[yKey]) || 0),
               color: color,
+              pointColors: pointColors,
               ...options.seriesOptions
             });
           });
@@ -2287,7 +2318,10 @@ class PieSeries {
         this._colors = [];
         if (dataset && dataset.values) {
             for (let i = 0; i < dataset.values.length; i++) {
-                if (dataset.colors && dataset.colors[i]) {
+                if (dataset.pointColors && dataset.pointColors[i]) {
+                    // Per-data-point color from data (e.g. { color: '#ff0000cc' })
+                    this._colors.push(dataset.pointColors[i]);
+                } else if (dataset.colors && dataset.colors[i]) {
                     this._colors.push(dataset.colors[i]);
                 } else if (window.CZ && window.CZ.ColorUtils) {
                     this._colors.push(window.CZ.ColorUtils.getSeriesColor(i));
