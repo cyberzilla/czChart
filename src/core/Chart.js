@@ -736,18 +736,29 @@
       // Toggle point selection on line/area charts
       if (this.type === 'line' || this.type === 'area') {
         const hit = this._activeHit;
+        // Find the exact series+point closest to click
+        const rect = this.renderer.mainCanvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const mx = (e.clientX - rect.left) * dpr;
+        const my = (e.clientY - rect.top) * dpr;
+        
+        let bestSeries = null;
+        let bestDist = Infinity;
         for (const s of this.series) {
-          if (s.togglePoint && s.visible) {
-            // Find which series this hit belongs to
-            if (s._renderedPoints) {
-              const pt = s._renderedPoints.find(p => p.index === hit.index);
-              if (pt) {
-                s.togglePoint(hit.index);
-              }
+          if (!s.togglePoint || !s.visible || !s._renderedPoints) continue;
+          for (const pt of s._renderedPoints) {
+            if (pt.index !== hit.index) continue;
+            const d = Math.sqrt((mx - pt.x) ** 2 + (my - pt.y) ** 2);
+            if (d < bestDist) {
+              bestDist = d;
+              bestSeries = s;
             }
           }
         }
-        this._render(false);
+        if (bestSeries && bestDist <= 30) {
+          bestSeries.togglePoint(hit.index);
+          this._render(false);
+        }
       }
 
       this.emit('click', this._activeHit);

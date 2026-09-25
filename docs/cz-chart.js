@@ -2,7 +2,7 @@
  * czChart v1.0.0 — Lightweight, Data-Driven Chart Library
  * (c) 2026 CyberZilla
  * Released under the MIT License
- * Built: 2026-09-25T11:44:43.101Z
+ * Built: 2026-09-25T11:54:12.262Z
  */
 
 (function(global) {
@@ -2385,7 +2385,8 @@ class PieSeries {
             cornerRadius: 0,
             visible: true,
             showLabels: true,
-            labelFormat: 'percent'
+            labelFormat: 'percent',
+            animationStyle: 'bounce' // 'bounce' = drop-in, 'grow' = radius scale
         }, options);
         this.dataset = null;
         this.visible = this.options.visible;
@@ -2494,16 +2495,17 @@ class PieSeries {
 
         let startAngleRad = (this.options.startAngle * Math.PI) / 180;
 
-        // Calculate total: include animating-out slices proportionally
+        // Calculate total: animate entering/exiting slices proportionally
         let total = 0;
         for (let i = 0; i < this.dataset.values.length; i++) {
             const v = this.dataset.values[i] || 0;
             if (v <= 0) continue;
             const anim = this._sliceAnims.get(i);
-            if (this._hiddenSlices && this._hiddenSlices.has(i)) continue;
+            if (this._hiddenSlices && this._hiddenSlices.has(i) && !anim) continue;
             if (anim && anim.type === 'out') {
-                // Shrinking out: reduce contribution to total
                 total += v * (1 - anim.progress);
+            } else if (anim && anim.type === 'in') {
+                total += v * anim.progress;
             } else {
                 total += v;
             }
@@ -2543,6 +2545,7 @@ class PieSeries {
             const c3 = c1 + 1;
             return c3 * t * t * t - c1 * t * t;
         };
+        const animStyle = this.options.animationStyle || 'bounce';
 
         // First pass: draw non-hovered slices
         let angle = startAngleRad;
@@ -2560,34 +2563,46 @@ class PieSeries {
             // Skip fully hidden (not animating) slices
             if (this._hiddenSlices && this._hiddenSlices.has(i) && !anim) continue;
 
-            // Calculate effective fraction (shrink for exiting slices)
+            // Calculate effective fraction (animate for enter/exit)
             let effectiveValue = value;
             if (isExiting) effectiveValue = value * (1 - anim.progress);
+            if (isEntering) effectiveValue = value * anim.progress;
             
-            const fraction = effectiveValue / total;
+            const fraction = total > 0 ? effectiveValue / total : 0;
             const sliceAngle = fraction * Math.PI * 2;
             const endAngle = angle + sliceAngle;
             const color = this._colors[i] || '#3b82f6';
             const isHovered = (i === this._hoverIndex);
 
-            // Determine animation state
+            // Animation state
             let sliceProgress = 1;
             const dropDistance = radius * 0.4;
             let offsetX = 0, offsetY = 0, sliceAlpha = 1;
+            let drawRadius = radius, drawInner = innerRadius;
 
             if (isExiting) {
-                // Slide out animation (reverse)
-                const t = easeInBack(anim.progress);
                 const midAngle = (angle + endAngle) / 2;
-                offsetX = Math.cos(midAngle) * dropDistance * t;
-                offsetY = Math.sin(midAngle) * dropDistance * t;
-                sliceAlpha = Math.max(0, 1 - anim.progress * 1.5);
+                if (animStyle === 'bounce') {
+                    const t = easeInBack(anim.progress);
+                    offsetX = Math.cos(midAngle) * dropDistance * t;
+                    offsetY = Math.sin(midAngle) * dropDistance * t;
+                } else {
+                    // grow style: shrink radius
+                    drawRadius = radius * (1 - anim.progress);
+                    drawInner = innerRadius * (1 - anim.progress);
+                }
+                sliceAlpha = Math.max(0, 1 - anim.progress * 1.2);
             } else if (isEntering) {
-                // Slide in animation
-                const t = easeOutBack(anim.progress);
                 const midAngle = (angle + endAngle) / 2;
-                offsetX = Math.cos(midAngle) * dropDistance * (1 - t);
-                offsetY = Math.sin(midAngle) * dropDistance * (1 - t);
+                if (animStyle === 'bounce') {
+                    const t = easeOutBack(anim.progress);
+                    offsetX = Math.cos(midAngle) * dropDistance * (1 - t);
+                    offsetY = Math.sin(midAngle) * dropDistance * (1 - t);
+                } else {
+                    // grow style: expand radius
+                    drawRadius = radius * anim.progress;
+                    drawInner = innerRadius * anim.progress;
+                }
                 sliceAlpha = Math.min(1, anim.progress * 1.5);
             } else if (progress < 1) {
                 // Initial page-load animation
@@ -2598,9 +2613,15 @@ class PieSeries {
                 const wnd = sliceEnd - adjustedStart;
                 const localT = (progress - adjustedStart) / wnd;
                 sliceProgress = localT <= 0 ? 0 : localT >= 1 ? 1 : easeOutBack(Math.min(1, localT));
-                const midAngle = (angle + endAngle) / 2;
-                offsetX = Math.cos(midAngle) * dropDistance * (1 - sliceProgress);
-                offsetY = Math.sin(midAngle) * dropDistance * (1 - sliceProgress);
+                
+                if (animStyle === 'bounce') {
+                    const midAngle = (angle + endAngle) / 2;
+                    offsetX = Math.cos(midAngle) * dropDistance * (1 - sliceProgress);
+                    offsetY = Math.sin(midAngle) * dropDistance * (1 - sliceProgress);
+                } else {
+                    drawRadius = radius * sliceProgress;
+                    drawInner = innerRadius * sliceProgress;
+                }
                 sliceAlpha = Math.min(1, sliceProgress * 1.5);
             }
 
@@ -2618,7 +2639,7 @@ class PieSeries {
             const isActive = isHovered || (hlSlice >= 0 && hlSlice === i);
             if (!isActive && (sliceProgress > 0 || isExiting || isEntering)) {
                 ctx.globalAlpha = (hlSlice >= 0) ? 0.2 * sliceAlpha : sliceAlpha;
-                this._drawSlice(ctx, cx, cy, radius, innerRadius, angle, endAngle, color, offsetX, offsetY);
+                this._drawSlice(ctx, cx, cy, drawRadius, drawInner, angle, endAngle, color, offsetX, offsetY);
                 ctx.globalAlpha = 1.0;
             }
 
@@ -4719,18 +4740,29 @@ window.CZ.RadarSeries = RadarSeries;
       // Toggle point selection on line/area charts
       if (this.type === 'line' || this.type === 'area') {
         const hit = this._activeHit;
+        // Find the exact series+point closest to click
+        const rect = this.renderer.mainCanvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const mx = (e.clientX - rect.left) * dpr;
+        const my = (e.clientY - rect.top) * dpr;
+        
+        let bestSeries = null;
+        let bestDist = Infinity;
         for (const s of this.series) {
-          if (s.togglePoint && s.visible) {
-            // Find which series this hit belongs to
-            if (s._renderedPoints) {
-              const pt = s._renderedPoints.find(p => p.index === hit.index);
-              if (pt) {
-                s.togglePoint(hit.index);
-              }
+          if (!s.togglePoint || !s.visible || !s._renderedPoints) continue;
+          for (const pt of s._renderedPoints) {
+            if (pt.index !== hit.index) continue;
+            const d = Math.sqrt((mx - pt.x) ** 2 + (my - pt.y) ** 2);
+            if (d < bestDist) {
+              bestDist = d;
+              bestSeries = s;
             }
           }
         }
-        this._render(false);
+        if (bestSeries && bestDist <= 30) {
+          bestSeries.togglePoint(hit.index);
+          this._render(false);
+        }
       }
 
       this.emit('click', this._activeHit);
