@@ -166,15 +166,19 @@ class PieSeries {
         if (activeIdx >= 0) {
             const hSlice = this._renderedSlices.find(s => s.index === activeIdx);
             if (hSlice) {
+                // Proportional offset: smaller slices get full offset, larger slices less
+                const dynamicOffset = explodeOffset * Math.pow(1 - hSlice.fraction, 0.4);
+                const clampedOffset = Math.max(5, Math.min(explodeOffset, dynamicOffset));
+
                 const midAngle = (hSlice.startAngleRad + hSlice.endAngleRad) / 2;
-                const dx = Math.cos(midAngle) * explodeOffset;
-                const dy = Math.sin(midAngle) * explodeOffset;
+                const dx = Math.cos(midAngle) * clampedOffset;
+                const dy = Math.sin(midAngle) * clampedOffset;
 
                 // Shadow
-                ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-                ctx.shadowBlur = 16;
-                ctx.shadowOffsetX = 2;
-                ctx.shadowOffsetY = 4;
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+                ctx.shadowBlur = 12;
+                ctx.shadowOffsetX = 1;
+                ctx.shadowOffsetY = 3;
 
                 // Draw exploded slice
                 ctx.globalAlpha = 1.0;
