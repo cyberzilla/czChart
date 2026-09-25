@@ -71,8 +71,8 @@ class PieSeries {
 
         const cx = plotArea.left + plotArea.width / 2;
         const cy = plotArea.top + plotArea.height / 2;
-        const radius = Math.min(plotArea.width, plotArea.height) / 2 * 0.82;
-        const innerRadius = radius * this.options.innerRadius;
+        const radius = Math.max(0, Math.min(plotArea.width, plotArea.height) / 2 * 0.82);
+        const innerRadius = Math.max(0, radius * this.options.innerRadius);
 
         let startAngleRad = (this.options.startAngle * Math.PI) / 180;
 
@@ -212,6 +212,9 @@ class PieSeries {
 
     /** @private */
     _drawSlice(ctx, cx, cy, outerR, innerR, startAngle, endAngle, fillColor, offsetX, offsetY) {
+        outerR = Math.max(0, outerR);
+        innerR = Math.max(0, innerR);
+        if (outerR === 0) return;
         ctx.beginPath();
         ctx.arc(cx + offsetX, cy + offsetY, outerR, startAngle, endAngle);
         if (innerR > 0) {
