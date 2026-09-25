@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>czChart — Basic Examples</title>
+    <script src="../dist/cz-chart.js?v=20260925-7"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f3f4f6;
+            padding: 24px;
+            color: #111827;
+        }
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            color: #6b7280;
+            margin-bottom: 32px;
+            font-size: 15px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 24px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+        }
+        .card h2 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .card p {
+            font-size: 13px;
+            color: #6b7280;
+            margin-bottom: 16px;
+        }
+        .chart-container {
+            width: 100%;
+            height: 320px;
+        }
+        pre {
+            background: #1f2937;
+            color: #e5e7eb;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            overflow-x: auto;
+            margin-top: 12px;
+            line-height: 1.6;
+        }
+        code { font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace; }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+        .badge-line { background: #dbeafe; color: #1d4ed8; }
+        .badge-bar { background: #fef3c7; color: #b45309; }
+        .badge-area { background: #d1fae5; color: #065f46; }
+        .badge-pie { background: #fce7f3; color: #be185d; }
+        .badge-donut { background: #ede9fe; color: #6d28d9; }
+        .badge-scatter { background: #ccfbf1; color: #0f766e; }
+        .badge-radar { background: #fee2e2; color: #b91c1c; }
+        .full-width { grid-column: 1 / -1; }
+    </style>
+</head>
+<body>
+    <h1>📊 czChart — Examples</h1>
+    <p class="subtitle">Lightweight, data-driven chart library. Zero dependencies. Single <code>&lt;script&gt;</code> tag.</p>
+
+    <div class="grid">
+
+        <!-- LINE CHART -->
+        <div class="card">
+            <h2>Line Chart <span class="badge badge-line">LINE</span></h2>
+            <p>Monthly revenue, cost & profit — smooth curves, 3 series</p>
+            <div id="chart-line" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-line', {
+  type: 'line',
+  data: [...],
+  x: 'month',
+  y: ['revenue', 'cost', 'profit'],
+  yAxis: { title: 'Amount (USD)' },
+  series: { smooth: true, pointRadius: 3 }
+});</code></pre>
+        </div>
+
+        <!-- BAR CHART -->
+        <div class="card">
+            <h2>Bar Chart <span class="badge badge-bar">BAR</span></h2>
+            <p>Quarterly sales by region — grouped bars</p>
+            <div id="chart-bar" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-bar', {
+  type: 'bar',
+  data: [...],
+  x: 'quarter',
+  y: ['north', 'south', 'east']
+});</code></pre>
+        </div>
+
+        <!-- AREA CHART -->
+        <div class="card">
+            <h2>Area Chart <span class="badge badge-area">AREA</span></h2>
+            <p>Daily website traffic — 30 days, smooth gradient fill</p>
+            <div id="chart-area" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-area', {
+  type: 'area',
+  data: [...], // 30 data points
+  x: 'date',
+  y: ['pageviews', 'sessions'],
+  yAxis: { title: 'Traffic' },
+  series: { smooth: true }
+});</code></pre>
+        </div>
+
+        <!-- PIE CHART -->
+        <div class="card">
+            <h2>Pie Chart <span class="badge badge-pie">PIE</span></h2>
+            <p>Market share — hover to explode, click legend to toggle</p>
+            <div id="chart-pie" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-pie', {
+  type: 'pie',
+  data: [...],
+  x: 'browser',
+  y: 'share'
+});</code></pre>
+        </div>
+
+        <!-- DONUT CHART -->
+        <div class="card">
+            <h2>Donut Chart <span class="badge badge-donut">DONUT</span></h2>
+            <p>Expense breakdown — inner radius = 0.6</p>
+            <div id="chart-donut" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-donut', {
+  type: 'donut',
+  data: [...],
+  x: 'category',
+  y: 'amount'
+});</code></pre>
+        </div>
+
+        <!-- SCATTER CHART -->
+        <div class="card">
+            <h2>Scatter Plot <span class="badge badge-scatter">SCATTER</span></h2>
+            <p>Height vs Weight — 60 random points</p>
+            <div id="chart-scatter" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-scatter', {
+  type: 'scatter',
+  data: scatterData,
+  x: 'height',
+  y: 'weight'
+});</code></pre>
+        </div>
+
+        <!-- RADAR CHART -->
+        <div class="card">
+            <h2>Radar Chart <span class="badge badge-radar">RADAR</span></h2>
+            <p>Skill comparison — multi-dataset overlay</p>
+            <div id="chart-radar" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-radar', {
+  type: 'radar',
+  data: [...],
+  x: 'skill',
+  y: ['player_a', 'player_b']
+});</code></pre>
+        </div>
+
+        <!-- DARK THEME -->
+        <div class="card" style="background:#111827;">
+            <h2 style="color:#e5e7eb;">Dark Theme <span class="badge" style="background:#374151;color:#9ca3af;">THEME</span></h2>
+            <p style="color:#6b7280;">Server response time (ms) — dark theme, area fill</p>
+            <div id="chart-dark" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-dark', {
+  type: 'line',
+  theme: 'dark',
+  data: [...],
+  yAxis: { title: 'Response Time (ms)' },
+  series: { smooth: true, fill: true, pointRadius: 4 }
+});</code></pre>
+        </div>
+
+        <!-- CSV DATA -->
+        <div class="card full-width">
+            <h2>CSV Data Source <span class="badge" style="background:#fef3c7;color:#92400e;">CSV</span></h2>
+            <p>Load data from inline CSV string — auto-parsed</p>
+            <div id="chart-csv" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-csv', {
+  type: 'bar',
+  data: "product,Q1,Q2,Q3,Q4\nLaptop,120,150,180,200\nPhone,200,180,220,260\nTablet,80,90,100,130"
+});</code></pre>
+        </div>
+
+    </div>
+
+    <script>
+    // =========================================================
+    // LINE CHART — 3 series, 12 months
+    // =========================================================
+    czChart.create('#chart-line', {
+        type: 'line',
+        data: [
+            { month: 'Jan', revenue: 4200, cost: 2800, profit: 1400 },
+            { month: 'Feb', revenue: 5100, cost: 3200, profit: 1900 },
+            { month: 'Mar', revenue: 4800, cost: 2900, profit: 1900 },
+            { month: 'Apr', revenue: 6300, cost: 3500, profit: 2800 },
+            { month: 'May', revenue: 7200, cost: 3800, profit: 3400 },
+            { month: 'Jun', revenue: 6800, cost: 3600, profit: 3200 },
+            { month: 'Jul', revenue: 8100, cost: 4100, profit: 4000 },
+            { month: 'Aug', revenue: 7500, cost: 3900, profit: 3600 },
+            { month: 'Sep', revenue: 8800, cost: 4300, profit: 4500 },
+            { month: 'Oct', revenue: 9200, cost: 4500, profit: 4700 },
+            { month: 'Nov', revenue: 8600, cost: 4200, profit: 4400 },
+            { month: 'Dec', revenue: 10500, cost: 4800, profit: 5700 }
+        ],
+        x: 'month',
+        y: ['revenue', 'cost', 'profit'],
+        yAxis: { title: 'Amount (USD)' },
+        series: { smooth: true, pointRadius: 3 }
+    });
+
+    // =========================================================
+    // BAR CHART
+    // =========================================================
+    czChart.create('#chart-bar', {
+        type: 'bar',
+        data: [
+            { quarter: 'Q1', north: 340, south: 280, east: 190 },
+            { quarter: 'Q2', north: 420, south: 310, east: 250 },
+            { quarter: 'Q3', north: 380, south: 350, east: 290 },
+            { quarter: 'Q4', north: 510, south: 400, east: 340 }
+        ],
+        x: 'quarter',
+        y: ['north', 'south', 'east']
+    });
+
+    // =========================================================
+    // AREA CHART — 30 days, 2 series
+    // =========================================================
+    czChart.create('#chart-area', {
+        type: 'area',
+        data: [
+            { day: 'Jun 01', pageviews: 2450, sessions: 820 },
+            { day: 'Jun 02', pageviews: 2680, sessions: 890 },
+            { day: 'Jun 03', pageviews: 2320, sessions: 760 },
+            { day: 'Jun 04', pageviews: 2100, sessions: 680 },
+            { day: 'Jun 05', pageviews: 1480, sessions: 510 },
+            { day: 'Jun 06', pageviews: 1350, sessions: 470 },
+            { day: 'Jun 07', pageviews: 2550, sessions: 840 },
+            { day: 'Jun 08', pageviews: 2780, sessions: 920 },
+            { day: 'Jun 09', pageviews: 2900, sessions: 950 },
+            { day: 'Jun 10', pageviews: 2650, sessions: 870 },
+            { day: 'Jun 11', pageviews: 2820, sessions: 930 },
+            { day: 'Jun 12', pageviews: 1600, sessions: 540 },
+            { day: 'Jun 13', pageviews: 1450, sessions: 490 },
+            { day: 'Jun 14', pageviews: 2700, sessions: 900 },
+            { day: 'Jun 15', pageviews: 3100, sessions: 1020 },
+            { day: 'Jun 16', pageviews: 3250, sessions: 1080 },
+            { day: 'Jun 17', pageviews: 2950, sessions: 970 },
+            { day: 'Jun 18', pageviews: 3050, sessions: 1010 },
+            { day: 'Jun 19', pageviews: 1750, sessions: 590 },
+            { day: 'Jun 20', pageviews: 1580, sessions: 530 },
+            { day: 'Jun 21', pageviews: 2900, sessions: 960 },
+            { day: 'Jun 22', pageviews: 3200, sessions: 1060 },
+            { day: 'Jun 23', pageviews: 3400, sessions: 1130 },
+            { day: 'Jun 24', pageviews: 3150, sessions: 1040 },
+            { day: 'Jun 25', pageviews: 3300, sessions: 1100 },
+            { day: 'Jun 26', pageviews: 1850, sessions: 620 },
+            { day: 'Jun 27', pageviews: 1700, sessions: 570 },
+            { day: 'Jun 28', pageviews: 3100, sessions: 1030 },
+            { day: 'Jun 29', pageviews: 3450, sessions: 1150 },
+            { day: 'Jun 30', pageviews: 3600, sessions: 1200 }
+        ],
+        x: 'day',
+        y: ['pageviews', 'sessions'],
+        yAxis: { title: 'Traffic' },
+        series: { smooth: true }
+    });
+
+    // =========================================================
+    // PIE CHART
+    // =========================================================
+    czChart.create('#chart-pie', {
+        type: 'pie',
+        data: [
+            { browser: 'Chrome', share: 64 },
+            { browser: 'Safari', share: 19 },
+            { browser: 'Firefox', share: 4 },
+            { browser: 'Edge', share: 4 },
+            { browser: 'Others', share: 9 }
+        ],
+        x: 'browser',
+        y: 'share'
+    });
+
+    // =========================================================
+    // DONUT CHART
+    // =========================================================
+    czChart.create('#chart-donut', {
+        type: 'donut',
+        data: [
+            { category: 'Rent', amount: 1500 },
+            { category: 'Food', amount: 600 },
+            { category: 'Transport', amount: 300 },
+            { category: 'Entertainment', amount: 200 },
+            { category: 'Utilities', amount: 250 },
+            { category: 'Savings', amount: 800 }
+        ],
+        x: 'category',
+        y: 'amount'
+    });
+
+    // =========================================================
+    // SCATTER CHART — 60 points
+    // =========================================================
+    (function() {
+        var scatterData = [];
+        for (var i = 0; i < 60; i++) {
+            var h = 150 + Math.random() * 40;
+            scatterData.push({
+                height: Math.round(h * 10) / 10,
+                weight: Math.round((0.6 * h - 30 + (Math.random() - 0.5) * 30) * 10) / 10
+            });
+        }
+        czChart.create('#chart-scatter', {
+            type: 'scatter',
+            data: scatterData,
+            x: 'height',
+            y: 'weight',
+            xAxis: { title: 'Height (cm)' },
+            yAxis: { title: 'Weight (kg)' }
+        });
+    })();
+
+    // =========================================================
+    // RADAR CHART
+    // =========================================================
+    czChart.create('#chart-radar', {
+        type: 'radar',
+        data: [
+            { skill: 'Speed',     player_a: 85, player_b: 70 },
+            { skill: 'Power',     player_a: 70, player_b: 90 },
+            { skill: 'Technique', player_a: 92, player_b: 75 },
+            { skill: 'Stamina',   player_a: 78, player_b: 85 },
+            { skill: 'Defense',   player_a: 65, player_b: 88 },
+            { skill: 'Passing',   player_a: 88, player_b: 72 }
+        ],
+        x: 'skill',
+        y: ['player_a', 'player_b']
+    });
+
+    // =========================================================
+    // DARK THEME — 24 hours server data
+    // =========================================================
+    (function() {
+        var hours = [];
+        for (var h = 0; h < 24; h++) {
+            var label = (h < 10 ? '0' : '') + h + ':00';
+            var base = h >= 8 && h <= 20 ? 180 : 50;
+            var peak = h >= 10 && h <= 14 ? 80 : 0;
+            hours.push({
+                time: label,
+                response: Math.round(base + peak + Math.random() * 40)
+            });
+        }
+
+        czChart.create('#chart-dark', {
+            type: 'line',
+            theme: 'dark',
+            data: hours,
+            x: 'time',
+            y: 'response',
+            yAxis: { title: 'Response Time (ms)' },
+            series: { smooth: true, fill: true, pointRadius: 2 }
+        });
+    })();
+
+    // =========================================================
+    // CSV DATA
+    // =========================================================
+    czChart.create('#chart-csv', {
+        type: 'bar',
+        data: "product,Q1,Q2,Q3,Q4\nLaptop,120,150,180,200\nPhone,200,180,220,260\nTablet,80,90,100,130",
+        x: 'product',
+        y: ['Q1', 'Q2', 'Q3', 'Q4']
+    });
+    </script>
+</body>
+</html>

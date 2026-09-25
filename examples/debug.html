@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html><head><script src="../dist/cz-chart.js"></script></head>
+<body>
+<div id="t" style="width:600px;height:400px;border:1px solid #ccc;"></div>
+<pre id="log"></pre>
+<script>
+const log = (msg) => { document.getElementById('log').textContent += msg + '\n'; console.log(msg); };
+
+const data = [
+    { month: 'Jan', revenue: 4200, cost: 2800 },
+    { month: 'Feb', revenue: 5100, cost: 3200 },
+    { month: 'Mar', revenue: 4800, cost: 2900 },
+    { month: 'Apr', revenue: 6300, cost: 3500 }
+];
+
+log('Data: ' + JSON.stringify(data[0]));
+
+const norm = CZ.Normalizer.normalize(data, {x: 'month', y: ['revenue', 'cost']});
+log('Normalized labels: ' + JSON.stringify(norm.labels));
+log('Dataset 0: name=' + norm.datasets[0].name + ' values=' + JSON.stringify(norm.datasets[0].values));
+log('Dataset 1: name=' + norm.datasets[1].name + ' values=' + JSON.stringify(norm.datasets[1].values));
+
+const chart = czChart.create('#t', {
+    type: 'line',
+    data: data,
+    x: 'month',
+    y: ['revenue', 'cost'],
+    series: { smooth: true, pointRadius: 3 }
+});
+
+setTimeout(() => {
+    log('Series count: ' + chart.series.length);
+    chart.series.forEach((s, i) => {
+        log('Series ' + i + ': visible=' + s.visible + ' dataset=' + (s.dataset ? s.dataset.name : 'NULL') + ' values=' + (s.dataset ? JSON.stringify(s.dataset.values.slice(0,3)) : 'N/A'));
+        const b = s.getBounds();
+        log('  Bounds: ' + JSON.stringify(b));
+    });
+    log('Width=' + chart._width + ' Height=' + chart._height);
+    log('PlotArea: ' + JSON.stringify(chart.plotArea));
+    if (chart.scales.y) {
+        log('Y Scale ticks: ' + JSON.stringify(chart.scales.y.getTicks().map(t => t.label)));
+    }
+}, 500);
+</script>
+</body>
+</html>
