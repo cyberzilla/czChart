@@ -2,7 +2,7 @@
  * czChart v1.0.0 — Lightweight, Data-Driven Chart Library
  * (c) 2026 CyberZilla
  * Released under the MIT License
- * Built: 2026-09-25T11:05:24.122Z
+ * Built: 2026-09-25T11:11:21.183Z
  */
 
 (function(global) {
@@ -2430,16 +2430,28 @@ class PieSeries {
         
         // Clip to plot area to prevent shadow bleeding
         ctx.beginPath();
-        ctx.rect(plotArea.left - 5, plotArea.top - 5, plotArea.width + 10, plotArea.height + 10);
+        ctx.rect(plotArea.left - 10, plotArea.top - 10, plotArea.width + 20, plotArea.height + 20);
         ctx.clip();
 
-        // Animated radius: grow from center outward
-        const animRadius = radius * progress;
-        const animInner = innerRadius * progress;
+        // Count visible slices for sequential animation
+        let visibleCount = 0;
+        for (let i = 0; i < values.length; i++) {
+            if (!values[i] || values[i] <= 0) continue;
+            if (this._hiddenSlices && this._hiddenSlices.has(i)) continue;
+            visibleCount++;
+        }
+
+        // EaseOutBack for bounce effect
+        const easeOutBack = (t) => {
+            const c1 = 1.70158;
+            const c3 = c1 + 1;
+            return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+        };
 
         // First pass: draw non-hovered slices
         let angle = startAngleRad;
         const hlSlice = this._highlightSlice !== undefined ? this._highlightSlice : -1;
+        let visibleIdx = 0;
 
         for (let i = 0; i < values.length; i++) {
             const value = values[i];
@@ -2452,25 +2464,44 @@ class PieSeries {
             const color = this._colors[i] || '#3b82f6';
             const isHovered = (i === this._hoverIndex);
 
+            // Sequential timing: each slice gets its own animation window
+            let sliceProgress = 1;
+            if (progress < 1) {
+                const sliceStart = visibleIdx / visibleCount;
+                const sliceEnd = (visibleIdx + 1) / visibleCount;
+                const overlap = 0.3 / visibleCount; // slight overlap between slices
+                const adjustedStart = Math.max(0, sliceStart - overlap);
+                const window = sliceEnd - adjustedStart;
+                const localT = (progress - adjustedStart) / window;
+                sliceProgress = localT <= 0 ? 0 : localT >= 1 ? 1 : easeOutBack(Math.min(1, localT));
+            }
+
+            // Slice drops in: starts offset outward, slides to center
+            const dropDistance = radius * 0.4;
+            const midAngle = (angle + endAngle) / 2;
+            const offsetX = Math.cos(midAngle) * dropDistance * (1 - sliceProgress);
+            const offsetY = Math.sin(midAngle) * dropDistance * (1 - sliceProgress);
+            const sliceAlpha = Math.min(1, sliceProgress * 1.5);
+
             this._renderedSlices.push({
                 index: i,
                 cx, cy,
-                radius: animRadius, innerRadius: animInner,
+                radius, innerRadius,
                 startAngleRad: angle,
                 endAngleRad: endAngle,
                 value, fraction, color,
                 label: labels[i] || ('Item ' + (i + 1))
             });
 
-            // Skip active slice in first pass — it will be drawn grown in second pass
+            // Skip active slice in first pass
             const isActive = isHovered || (hlSlice >= 0 && hlSlice === i);
-            if (!isActive) {
-                // Apply highlight dimming per slice
-                ctx.globalAlpha = (hlSlice >= 0) ? 0.2 : 1.0;
-                this._drawSlice(ctx, cx, cy, animRadius, animInner, angle, endAngle, color, 0, 0);
+            if (!isActive && sliceProgress > 0) {
+                ctx.globalAlpha = (hlSlice >= 0) ? 0.2 * sliceAlpha : sliceAlpha;
+                this._drawSlice(ctx, cx, cy, radius, innerRadius, angle, endAngle, color, offsetX, offsetY);
                 ctx.globalAlpha = 1.0;
             }
 
+            visibleIdx++;
             angle = endAngle;
         }
 
