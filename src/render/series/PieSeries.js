@@ -159,39 +159,37 @@ class PieSeries {
             }
         }
 
-        // Second pass: draw active slice ON TOP with explode + shadow
+        // Second pass: draw active slice ON TOP with grown radius (no translate)
         // Active = hovered via mouse OR highlighted via legend hover
         const activeIdx = this._hoverIndex >= 0 ? this._hoverIndex : (hlSlice >= 0 ? hlSlice : -1);
+        const growPx = 6;
 
         if (activeIdx >= 0) {
             const hSlice = this._renderedSlices.find(s => s.index === activeIdx);
             if (hSlice) {
-                const midAngle = (hSlice.startAngleRad + hSlice.endAngleRad) / 2;
-                const dx = Math.cos(midAngle) * explodeOffset;
-                const dy = Math.sin(midAngle) * explodeOffset;
-
                 // Shadow
                 ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
-                ctx.shadowBlur = 12;
-                ctx.shadowOffsetX = 1;
-                ctx.shadowOffsetY = 3;
+                ctx.shadowBlur = 10;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 2;
 
-                // Draw exploded slice
+                // Draw slice with increased radius (no translate)
                 ctx.globalAlpha = 1.0;
+                const grownInner = innerRadius > 0 ? Math.max(0, innerRadius - 2) : 0;
                 this._drawSlice(
                     ctx, cx, cy,
-                    radius + 2, innerRadius,
+                    radius + growPx, grownInner,
                     hSlice.startAngleRad, hSlice.endAngleRad,
                     hSlice.color,
-                    dx, dy
+                    0, 0
                 );
 
                 // White edge highlight
                 ctx.shadowColor = 'transparent';
                 ctx.shadowBlur = 0;
                 ctx.beginPath();
-                ctx.arc(cx + dx, cy + dy, radius + 2, hSlice.startAngleRad, hSlice.endAngleRad);
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.arc(cx, cy, radius + growPx, hSlice.startAngleRad, hSlice.endAngleRad);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
                 ctx.lineWidth = 2;
                 ctx.stroke();
             }
@@ -199,7 +197,7 @@ class PieSeries {
 
         // Draw labels
         if (this.options.showLabels && progress >= 1) {
-            this._drawLabels(ctx, cx, cy, radius, innerRadius, total);
+            this._drawLabels(ctx, cx, cy, radius, innerRadius, total, activeIdx, growPx);
         }
 
         ctx.restore();
@@ -228,7 +226,7 @@ class PieSeries {
     }
 
     /** @private */
-    _drawLabels(ctx, cx, cy, radius, innerRadius, total) {
+    _drawLabels(ctx, cx, cy, radius, innerRadius, total, activeIdx, growPx) {
         ctx.save();
         ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         ctx.textAlign = 'center';
@@ -237,14 +235,16 @@ class PieSeries {
         for (const slice of this._renderedSlices) {
             if (slice.fraction < 0.04) continue;
 
+            const isActive = (slice.index === activeIdx);
+            const sliceRadius = isActive ? radius + (growPx || 0) : radius;
+            const sliceInner = isActive && innerRadius > 0 ? Math.max(0, innerRadius - 2) : innerRadius;
+
             const midAngle = (slice.startAngleRad + slice.endAngleRad) / 2;
-            const isHovered = (slice.index === this._hoverIndex);
-            const explodeOff = isHovered ? 12 : 0;
-            const labelR = innerRadius > 0
-                ? (innerRadius + radius) / 2
-                : radius * 0.65;
-            const lx = cx + Math.cos(midAngle) * (labelR + explodeOff);
-            const ly = cy + Math.sin(midAngle) * (labelR + explodeOff);
+            const labelR = sliceInner > 0
+                ? (sliceInner + sliceRadius) / 2
+                : sliceRadius * 0.65;
+            const lx = cx + Math.cos(midAngle) * labelR;
+            const ly = cy + Math.sin(midAngle) * labelR;
 
             let text = '';
             if (this.options.labelFormat === 'percent') {
@@ -253,6 +253,13 @@ class PieSeries {
                 text = String(slice.value);
             } else {
                 text = slice.label;
+            }
+
+            // Active label slightly bolder
+            if (isActive) {
+                ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            } else {
+                ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
             }
 
             ctx.fillStyle = '#fff';
