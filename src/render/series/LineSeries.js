@@ -21,6 +21,7 @@ class LineSeries {
         }, options);
         this.dataset = null;
         this.visible = this.options.visible;
+        this._selectedPoints = new Set(); // indices of pinned/clicked points
     }
 
     /**
@@ -184,19 +185,52 @@ class LineSeries {
 
         // Draw points
         if (this.options.pointRadius > 0) {
-            ctx.fillStyle = this.dataset.color || '#000';
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 1.5;
+            const color = this.dataset.color || '#000';
             points.forEach(p => {
+                const isSelected = this._selectedPoints.has(p.index);
+                const r = isSelected ? this.options.pointHoverRadius : this.options.pointRadius;
+
+                if (isSelected) {
+                    // Outer ring for selected points
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, r + 4, 0, Math.PI * 2);
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+
+                    // White gap ring
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, r + 1, 0, Math.PI * 2);
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+
+                // Filled point
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, this.options.pointRadius, 0, Math.PI * 2);
+                ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+                ctx.fillStyle = color;
                 ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1.5;
                 ctx.stroke();
             });
         }
 
         ctx.restore();
         this._renderedPoints = points; // cache for hit testing
+    }
+
+    /**
+     * Toggle a data point selection (click to pin/unpin)
+     * @param {number} index - Data point index
+     */
+    togglePoint(index) {
+        if (this._selectedPoints.has(index)) {
+            this._selectedPoints.delete(index);
+        } else {
+            this._selectedPoints.add(index);
+        }
     }
 
     /**

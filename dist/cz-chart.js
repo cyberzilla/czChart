@@ -2,7 +2,7 @@
  * czChart v1.0.0 — Lightweight, Data-Driven Chart Library
  * (c) 2026 CyberZilla
  * Released under the MIT License
- * Built: 2026-09-25T11:19:10.290Z
+ * Built: 2026-09-25T11:44:43.101Z
  */
 
 (function(global) {
@@ -1882,6 +1882,7 @@ class LineSeries {
         }, options);
         this.dataset = null;
         this.visible = this.options.visible;
+        this._selectedPoints = new Set(); // indices of pinned/clicked points
     }
 
     /**
@@ -2045,19 +2046,52 @@ class LineSeries {
 
         // Draw points
         if (this.options.pointRadius > 0) {
-            ctx.fillStyle = this.dataset.color || '#000';
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 1.5;
+            const color = this.dataset.color || '#000';
             points.forEach(p => {
+                const isSelected = this._selectedPoints.has(p.index);
+                const r = isSelected ? this.options.pointHoverRadius : this.options.pointRadius;
+
+                if (isSelected) {
+                    // Outer ring for selected points
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, r + 4, 0, Math.PI * 2);
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+
+                    // White gap ring
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, r + 1, 0, Math.PI * 2);
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+
+                // Filled point
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, this.options.pointRadius, 0, Math.PI * 2);
+                ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+                ctx.fillStyle = color;
                 ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1.5;
                 ctx.stroke();
             });
         }
 
         ctx.restore();
         this._renderedPoints = points; // cache for hit testing
+    }
+
+    /**
+     * Toggle a data point selection (click to pin/unpin)
+     * @param {number} index - Data point index
+     */
+    togglePoint(index) {
+        if (this._selectedPoints.has(index)) {
+            this._selectedPoints.delete(index);
+        } else {
+            this._selectedPoints.add(index);
+        }
     }
 
     /**
@@ -2475,7 +2509,6 @@ class PieSeries {
             }
         }
         if (total === 0) {
-            ctx.restore();
             return;
         }
 
@@ -4682,6 +4715,24 @@ window.CZ.RadarSeries = RadarSeries;
     /** @private */
     _handleClick(e) {
       if (this._destroyed || !this._activeHit) return;
+      
+      // Toggle point selection on line/area charts
+      if (this.type === 'line' || this.type === 'area') {
+        const hit = this._activeHit;
+        for (const s of this.series) {
+          if (s.togglePoint && s.visible) {
+            // Find which series this hit belongs to
+            if (s._renderedPoints) {
+              const pt = s._renderedPoints.find(p => p.index === hit.index);
+              if (pt) {
+                s.togglePoint(hit.index);
+              }
+            }
+          }
+        }
+        this._render(false);
+      }
+
       this.emit('click', this._activeHit);
       this.pluginManager.hook('onClick', this._activeHit);
     }

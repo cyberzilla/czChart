@@ -732,6 +732,24 @@
     /** @private */
     _handleClick(e) {
       if (this._destroyed || !this._activeHit) return;
+      
+      // Toggle point selection on line/area charts
+      if (this.type === 'line' || this.type === 'area') {
+        const hit = this._activeHit;
+        for (const s of this.series) {
+          if (s.togglePoint && s.visible) {
+            // Find which series this hit belongs to
+            if (s._renderedPoints) {
+              const pt = s._renderedPoints.find(p => p.index === hit.index);
+              if (pt) {
+                s.togglePoint(hit.index);
+              }
+            }
+          }
+        }
+        this._render(false);
+      }
+
       this.emit('click', this._activeHit);
       this.pluginManager.hook('onClick', this._activeHit);
     }

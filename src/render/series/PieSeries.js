@@ -138,7 +138,6 @@ class PieSeries {
             }
         }
         if (total === 0) {
-            ctx.restore();
             return;
         }
 
