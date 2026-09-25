@@ -183,28 +183,45 @@ class LineSeries {
         ctx.lineCap = 'round';
         ctx.stroke(path);
 
-        // Draw points
+        // Draw normal (non-selected) points inside clip
         if (this.options.pointRadius > 0) {
             const color = this.dataset.color || '#000';
             points.forEach(p => {
-                const isSelected = this._selectedPoints.has(p.index);
-                const r = isSelected ? this.options.pointHoverRadius : this.options.pointRadius;
+                if (this._selectedPoints.has(p.index)) return; // draw later
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, this.options.pointRadius, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            });
+        }
 
-                if (isSelected) {
-                    // Outer ring for selected points
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, r + 4, 0, Math.PI * 2);
-                    ctx.strokeStyle = color;
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
+        ctx.restore(); // exit clip
+        this._renderedPoints = points;
 
-                    // White gap ring
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, r + 1, 0, Math.PI * 2);
-                    ctx.strokeStyle = '#fff';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                }
+        // Draw selected points OUTSIDE clip so ring is not cut off
+        if (this.options.pointRadius > 0 && this._selectedPoints.size > 0) {
+            ctx.save();
+            const color = this.dataset.color || '#000';
+            points.forEach(p => {
+                if (!this._selectedPoints.has(p.index)) return;
+                const r = this.options.pointHoverRadius;
+
+                // Outer ring
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, r + 4, 0, Math.PI * 2);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // White gap ring
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, r + 1, 0, Math.PI * 2);
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
 
                 // Filled point
                 ctx.beginPath();
@@ -215,10 +232,8 @@ class LineSeries {
                 ctx.lineWidth = 1.5;
                 ctx.stroke();
             });
+            ctx.restore();
         }
-
-        ctx.restore();
-        this._renderedPoints = points; // cache for hit testing
     }
 
     /**

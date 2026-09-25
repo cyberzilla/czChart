@@ -210,21 +210,22 @@ class PieSeries {
             let drawRadius = radius, drawInner = innerRadius;
 
             if (isExiting) {
+                // Smooth out — no bounce/overshoot
+                const t = anim.progress * anim.progress; // easeInQuad
                 const midAngle = (angle + endAngle) / 2;
                 if (animStyle === 'bounce') {
-                    const t = easeInBack(anim.progress);
                     offsetX = Math.cos(midAngle) * dropDistance * t;
                     offsetY = Math.sin(midAngle) * dropDistance * t;
                 } else {
-                    // grow style: shrink radius
-                    drawRadius = radius * (1 - anim.progress);
-                    drawInner = innerRadius * (1 - anim.progress);
+                    drawRadius = radius * (1 - t);
+                    drawInner = innerRadius * (1 - t);
                 }
                 sliceAlpha = Math.max(0, 1 - anim.progress * 1.2);
             } else if (isEntering) {
+                // Smooth in — no bounce/overshoot
+                const t = 1 - Math.pow(1 - anim.progress, 3); // easeOutCubic
                 const midAngle = (angle + endAngle) / 2;
                 if (animStyle === 'bounce') {
-                    const t = easeOutBack(anim.progress);
                     offsetX = Math.cos(midAngle) * dropDistance * (1 - t);
                     offsetY = Math.sin(midAngle) * dropDistance * (1 - t);
                 } else {

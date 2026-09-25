@@ -2,7 +2,7 @@
  * czChart v1.0.0 — Lightweight, Data-Driven Chart Library
  * (c) 2026 CyberZilla
  * Released under the MIT License
- * Built: 2026-09-25T11:54:12.262Z
+ * Built: 2026-09-25T12:02:59.232Z
  */
 
 (function(global) {
@@ -2044,28 +2044,45 @@ class LineSeries {
         ctx.lineCap = 'round';
         ctx.stroke(path);
 
-        // Draw points
+        // Draw normal (non-selected) points inside clip
         if (this.options.pointRadius > 0) {
             const color = this.dataset.color || '#000';
             points.forEach(p => {
-                const isSelected = this._selectedPoints.has(p.index);
-                const r = isSelected ? this.options.pointHoverRadius : this.options.pointRadius;
+                if (this._selectedPoints.has(p.index)) return; // draw later
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, this.options.pointRadius, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            });
+        }
 
-                if (isSelected) {
-                    // Outer ring for selected points
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, r + 4, 0, Math.PI * 2);
-                    ctx.strokeStyle = color;
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
+        ctx.restore(); // exit clip
+        this._renderedPoints = points;
 
-                    // White gap ring
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, r + 1, 0, Math.PI * 2);
-                    ctx.strokeStyle = '#fff';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                }
+        // Draw selected points OUTSIDE clip so ring is not cut off
+        if (this.options.pointRadius > 0 && this._selectedPoints.size > 0) {
+            ctx.save();
+            const color = this.dataset.color || '#000';
+            points.forEach(p => {
+                if (!this._selectedPoints.has(p.index)) return;
+                const r = this.options.pointHoverRadius;
+
+                // Outer ring
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, r + 4, 0, Math.PI * 2);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // White gap ring
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, r + 1, 0, Math.PI * 2);
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
 
                 // Filled point
                 ctx.beginPath();
@@ -2076,10 +2093,8 @@ class LineSeries {
                 ctx.lineWidth = 1.5;
                 ctx.stroke();
             });
+            ctx.restore();
         }
-
-        ctx.restore();
-        this._renderedPoints = points; // cache for hit testing
     }
 
     /**
@@ -2581,21 +2596,22 @@ class PieSeries {
             let drawRadius = radius, drawInner = innerRadius;
 
             if (isExiting) {
+                // Smooth out — no bounce/overshoot
+                const t = anim.progress * anim.progress; // easeInQuad
                 const midAngle = (angle + endAngle) / 2;
                 if (animStyle === 'bounce') {
-                    const t = easeInBack(anim.progress);
                     offsetX = Math.cos(midAngle) * dropDistance * t;
                     offsetY = Math.sin(midAngle) * dropDistance * t;
                 } else {
-                    // grow style: shrink radius
-                    drawRadius = radius * (1 - anim.progress);
-                    drawInner = innerRadius * (1 - anim.progress);
+                    drawRadius = radius * (1 - t);
+                    drawInner = innerRadius * (1 - t);
                 }
                 sliceAlpha = Math.max(0, 1 - anim.progress * 1.2);
             } else if (isEntering) {
+                // Smooth in — no bounce/overshoot
+                const t = 1 - Math.pow(1 - anim.progress, 3); // easeOutCubic
                 const midAngle = (angle + endAngle) / 2;
                 if (animStyle === 'bounce') {
-                    const t = easeOutBack(anim.progress);
                     offsetX = Math.cos(midAngle) * dropDistance * (1 - t);
                     offsetY = Math.sin(midAngle) * dropDistance * (1 - t);
                 } else {
@@ -3032,6 +3048,7 @@ class RadarSeries {
         }, options);
         this.dataset = null;
         this.visible = this.options.visible;
+        this._selectedPoints = new Set();
     }
 
     setData(dataset) {
@@ -3132,7 +3149,49 @@ class RadarSeries {
         ctx.lineWidth = 2;
         ctx.stroke();
 
+        // Draw data points
+        for (const pt of this._renderedPoints) {
+            const isSelected = this._selectedPoints.has(pt.index);
+            const r = isSelected ? 6 : 3;
+
+            if (isSelected) {
+                // Outer ring
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, r + 4, 0, Math.PI * 2);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // White gap ring
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, r + 1, 0, Math.PI * 2);
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            // Filled point
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+        }
+
         ctx.restore();
+    }
+
+    /**
+     * Toggle a data point selection
+     */
+    togglePoint(index) {
+        if (this._selectedPoints.has(index)) {
+            this._selectedPoints.delete(index);
+        } else {
+            this._selectedPoints.add(index);
+        }
     }
 
     drawHover(ctx, plotArea, xScale, yScale, activeIndex) {
@@ -4737,8 +4796,8 @@ window.CZ.RadarSeries = RadarSeries;
     _handleClick(e) {
       if (this._destroyed || !this._activeHit) return;
       
-      // Toggle point selection on line/area charts
-      if (this.type === 'line' || this.type === 'area') {
+      // Toggle point selection on line/area/radar charts
+      if (this.type === 'line' || this.type === 'area' || this.type === 'radar') {
         const hit = this._activeHit;
         // Find the exact series+point closest to click
         const rect = this.renderer.mainCanvas.getBoundingClientRect();

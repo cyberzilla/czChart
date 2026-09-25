@@ -733,8 +733,8 @@
     _handleClick(e) {
       if (this._destroyed || !this._activeHit) return;
       
-      // Toggle point selection on line/area charts
-      if (this.type === 'line' || this.type === 'area') {
+      // Toggle point selection on line/area/radar charts
+      if (this.type === 'line' || this.type === 'area' || this.type === 'radar') {
         const hit = this._activeHit;
         // Find the exact series+point closest to click
         const rect = this.renderer.mainCanvas.getBoundingClientRect();

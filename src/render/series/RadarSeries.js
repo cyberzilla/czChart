@@ -18,6 +18,7 @@ class RadarSeries {
         }, options);
         this.dataset = null;
         this.visible = this.options.visible;
+        this._selectedPoints = new Set();
     }
 
     setData(dataset) {
@@ -118,7 +119,49 @@ class RadarSeries {
         ctx.lineWidth = 2;
         ctx.stroke();
 
+        // Draw data points
+        for (const pt of this._renderedPoints) {
+            const isSelected = this._selectedPoints.has(pt.index);
+            const r = isSelected ? 6 : 3;
+
+            if (isSelected) {
+                // Outer ring
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, r + 4, 0, Math.PI * 2);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // White gap ring
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, r + 1, 0, Math.PI * 2);
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            // Filled point
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+        }
+
         ctx.restore();
+    }
+
+    /**
+     * Toggle a data point selection
+     */
+    togglePoint(index) {
+        if (this._selectedPoints.has(index)) {
+            this._selectedPoints.delete(index);
+        } else {
+            this._selectedPoints.add(index);
+        }
     }
 
     drawHover(ctx, plotArea, xScale, yScale, activeIndex) {
