@@ -38,9 +38,14 @@ const FILES = [
   // 6. Series renderers
   'src/render/series/LineSeries.js',
   'src/render/series/BarSeries.js',
+  'src/render/series/HorizontalBarSeries.js',
   'src/render/series/PieSeries.js',
   'src/render/series/ScatterSeries.js',
   'src/render/series/RadarSeries.js',
+  'src/render/series/GaugeSeries.js',
+  'src/render/series/CandlestickSeries.js',
+  'src/render/series/FunnelSeries.js',
+  'src/render/series/HeatmapSeries.js',
 
   // 7. Interaction
   'src/interaction/HitTest.js',

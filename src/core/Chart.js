@@ -8,15 +8,20 @@
   const SERIES_MAP = {
     line: 'LineSeries',
     bar: 'BarSeries',
+    horizontalBar: 'HorizontalBarSeries',
     area: 'LineSeries',      // area is line with fill=true
     pie: 'PieSeries',
     donut: 'PieSeries',      // donut is pie with innerRadius
     scatter: 'ScatterSeries',
-    radar: 'RadarSeries'
+    radar: 'RadarSeries',
+    gauge: 'GaugeSeries',
+    candlestick: 'CandlestickSeries',
+    funnel: 'FunnelSeries',
+    heatmap: 'HeatmapSeries'
   };
 
   /** Chart types that use radial (non-cartesian) layout */
-  const RADIAL_TYPES = ['pie', 'donut', 'radar'];
+  const RADIAL_TYPES = ['pie', 'donut', 'radar', 'gauge', 'funnel'];
 
   /** Global plugin registry */
   const _globalPlugins = [];
@@ -283,7 +288,7 @@
 
       // Count bar datasets for grouped positioning
       let barCount = 0;
-      if (this.type === 'bar') {
+      if (this.type === 'bar' || this.type === 'horizontalBar') {
         barCount = this.normalizedData.datasets.length;
       }
 
@@ -306,12 +311,33 @@
             }))
           };
           instance.setData(scatterDataset);
+        } else if (this.type === 'candlestick') {
+          // For candlestick, merge all 4 datasets (open,high,low,close) into one
+          // Only first series instance draws; skip creating additional ones
+          if (index > 0) return; // skip — handled by first instance
+
+          const datasets = this.normalizedData.datasets;
+          const len = datasets[0] ? datasets[0].values.length : 0;
+          const ohlcData = [];
+          for (let j = 0; j < len; j++) {
+            ohlcData.push({
+              open:  datasets[0] ? datasets[0].values[j] : 0,
+              high:  datasets[1] ? datasets[1].values[j] : 0,
+              low:   datasets[2] ? datasets[2].values[j] : 0,
+              close: datasets[3] ? datasets[3].values[j] : 0
+            });
+          }
+          instance.setData({
+            name: 'OHLC',
+            ohlc: ohlcData,
+            color: seriesOptions.bullishColor || '#10b981'
+          });
         } else {
           instance.setData(dataset);
         }
 
-        // For grouped bars, set position info
-        if (this.type === 'bar' && instance.setDatasetIndex) {
+        // For grouped bars (vertical and horizontal), set position info
+        if ((this.type === 'bar' || this.type === 'horizontalBar') && instance.setDatasetIndex) {
           instance.setDatasetIndex(index, barCount);
         }
 
@@ -336,6 +362,9 @@
         case 'bar':
           Object.assign(opts, this.options.bar);
           break;
+        case 'horizontalBar':
+          Object.assign(opts, this.options.horizontalBar || this.options.bar);
+          break;
         case 'pie':
           Object.assign(opts, this.options.pie);
           break;
@@ -347,6 +376,18 @@
           break;
         case 'radar':
           Object.assign(opts, this.options.radar);
+          break;
+        case 'gauge':
+          Object.assign(opts, this.options.gauge || {});
+          break;
+        case 'candlestick':
+          Object.assign(opts, this.options.candlestick || {});
+          break;
+        case 'funnel':
+          Object.assign(opts, this.options.funnel || {});
+          break;
+        case 'heatmap':
+          Object.assign(opts, this.options.heatmap || {});
           break;
         default:
           Object.assign(opts, this.options.series);
@@ -773,8 +814,8 @@
     _handleClick(e) {
       if (this._destroyed) return;
       
-      // Toggle point selection on line/area/scatter/radar/bar charts
-      if (this.type === 'line' || this.type === 'area' || this.type === 'scatter' || this.type === 'radar' || this.type === 'bar') {
+      // Toggle point selection on line/area/scatter/radar/bar/horizontalBar/candlestick charts
+      if (this.type === 'line' || this.type === 'area' || this.type === 'scatter' || this.type === 'radar' || this.type === 'bar' || this.type === 'horizontalBar' || this.type === 'candlestick') {
         const rect = this.renderer.getMainCanvas().getBoundingClientRect();
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
@@ -874,8 +915,8 @@
      * @param {number} index - Dataset index
      */
     toggleSeries(index) {
-      // For pie/donut, toggle individual data points with animation
-      if ((this.type === 'pie' || this.type === 'donut') && this.series[0]) {
+      // For pie/donut/funnel, toggle individual data points with animation
+      if ((this.type === 'pie' || this.type === 'donut' || this.type === 'funnel') && this.series[0]) {
         const pie = this.series[0];
         if (!pie._hiddenSlices) pie._hiddenSlices = new Set();
         const wasHidden = pie._hiddenSlices.has(index);
@@ -898,7 +939,7 @@
 
         // For bar charts, recalculate grouped positions so visible bars
         // redistribute evenly (no empty gaps)
-        if (this.type === 'bar') {
+        if (this.type === 'bar' || this.type === 'horizontalBar') {
           this._recalcBarPositions();
         }
 

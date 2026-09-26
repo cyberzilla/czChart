@@ -76,7 +76,22 @@
         .badge-donut { background: #ede9fe; color: #6d28d9; }
         .badge-scatter { background: #ccfbf1; color: #0f766e; }
         .badge-radar { background: #fee2e2; color: #b91c1c; }
+        .badge-gauge { background: #fef9c3; color: #854d0e; }
+        .badge-hbar { background: #e0f2fe; color: #0369a1; }
+        .badge-candle { background: #f0fdf4; color: #166534; }
+        .badge-funnel { background: #fdf2f8; color: #9d174d; }
+        .badge-heatmap { background: #fff7ed; color: #c2410c; }
+        .badge-new { background: #dcfce7; color: #15803d; font-size: 9px; vertical-align: top; }
         .full-width { grid-column: 1 / -1; }
+        .section-title {
+            grid-column: 1 / -1;
+            font-size: 20px;
+            font-weight: 700;
+            color: #374151;
+            margin-top: 16px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e5e7eb;
+        }
     </style>
 </head>
 <body>
@@ -95,7 +110,6 @@
   data: [...],
   x: 'month',
   y: ['revenue', 'cost', 'profit'],
-  yAxis: { title: 'Amount (USD)' },
   series: { smooth: true, pointRadius: 3 }
 });</code></pre>
         </div>
@@ -123,7 +137,6 @@
   data: [...], // 30 data points
   x: 'date',
   y: ['pageviews', 'sessions'],
-  yAxis: { title: 'Traffic' },
   series: { smooth: true }
 });</code></pre>
         </div>
@@ -189,8 +202,82 @@
   type: 'line',
   theme: 'dark',
   data: [...],
-  yAxis: { title: 'Response Time (ms)' },
   series: { smooth: true, fill: true, pointRadius: 4 }
+});</code></pre>
+        </div>
+
+        <!-- =============== NEW CHART TYPES =============== -->
+        <h3 class="section-title">🆕 New Chart Types</h3>
+
+        <!-- GAUGE CHART -->
+        <div class="card">
+            <h2>Gauge Chart <span class="badge badge-gauge">GAUGE</span> <span class="badge badge-new">NEW</span></h2>
+            <p>Server CPU usage — semi-circle gauge with colored zones</p>
+            <div id="chart-gauge" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-gauge', {
+  type: 'gauge',
+  data: [{ label: 'CPU', value: 72 }],
+  x: 'label', y: 'value',
+  gauge: {
+    min: 0, max: 100,
+    zones: [
+      { min: 0, max: 50, color: '#10b981' },
+      { min: 50, max: 75, color: '#f59e0b' },
+      { min: 75, max: 100, color: '#ef4444' }
+    ]
+  }
+});</code></pre>
+        </div>
+
+        <!-- HORIZONTAL BAR CHART -->
+        <div class="card">
+            <h2>Horizontal Bar <span class="badge badge-hbar">H-BAR</span> <span class="badge badge-new">NEW</span></h2>
+            <p>Top programming languages — horizontal grouped bars</p>
+            <div id="chart-hbar" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-hbar', {
+  type: 'horizontalBar',
+  data: [...],
+  x: 'language',
+  y: ['popularity', 'jobs']
+});</code></pre>
+        </div>
+
+        <!-- CANDLESTICK CHART -->
+        <div class="card">
+            <h2>Candlestick <span class="badge badge-candle">OHLC</span> <span class="badge badge-new">NEW</span></h2>
+            <p>Stock price OHLC data — 20 trading days</p>
+            <div id="chart-candle" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-candle', {
+  type: 'candlestick',
+  data: ohlcData,
+  x: 'date',
+  y: 'ohlc'
+});</code></pre>
+        </div>
+
+        <!-- FUNNEL CHART -->
+        <div class="card">
+            <h2>Funnel Chart <span class="badge badge-funnel">FUNNEL</span> <span class="badge badge-new">NEW</span></h2>
+            <p>Sales pipeline conversion — top to bottom flow</p>
+            <div id="chart-funnel" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-funnel', {
+  type: 'funnel',
+  data: [...],
+  x: 'stage',
+  y: 'count'
+});</code></pre>
+        </div>
+
+        <!-- HEATMAP CHART -->
+        <div class="card full-width">
+            <h2>Heatmap <span class="badge badge-heatmap">HEATMAP</span> <span class="badge badge-new">NEW</span></h2>
+            <p>Weekly activity — hours vs days intensity grid</p>
+            <div id="chart-heatmap" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-heatmap', {
+  type: 'heatmap',
+  data: [...],
+  x: 'hour',
+  y: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
 });</code></pre>
         </div>
 
@@ -389,6 +476,123 @@
             series: { smooth: true, fill: true, pointRadius: 2 }
         });
     })();
+
+    // =========================================================
+    // GAUGE CHART — CPU Usage
+    // =========================================================
+    czChart.create('#chart-gauge', {
+        type: 'gauge',
+        data: [
+            { label: 'CPU', value: 72 }
+        ],
+        x: 'label',
+        y: 'value',
+        gauge: {
+            min: 0,
+            max: 100,
+            zones: [
+                { min: 0, max: 50, color: '#10b981' },
+                { min: 50, max: 75, color: '#f59e0b' },
+                { min: 75, max: 100, color: '#ef4444' }
+            ]
+        }
+    });
+
+    // =========================================================
+    // HORIZONTAL BAR CHART — Programming Languages
+    // =========================================================
+    czChart.create('#chart-hbar', {
+        type: 'horizontalBar',
+        data: [
+            { language: 'JavaScript', popularity: 68, jobs: 45 },
+            { language: 'Python',     popularity: 62, jobs: 52 },
+            { language: 'Java',       popularity: 35, jobs: 38 },
+            { language: 'TypeScript', popularity: 30, jobs: 28 },
+            { language: 'C#',         popularity: 25, jobs: 22 },
+            { language: 'Go',         popularity: 18, jobs: 15 }
+        ],
+        x: 'language',
+        y: ['popularity', 'jobs'],
+        colors: ['#3b82f6', '#8b5cf6']
+    });
+
+    // =========================================================
+    // CANDLESTICK CHART — Stock OHLC Data
+    // =========================================================
+    (function() {
+        var ohlcData = [];
+        var price = 150;
+        var days = ['Jan 02','Jan 03','Jan 06','Jan 07','Jan 08','Jan 09','Jan 10',
+                     'Jan 13','Jan 14','Jan 15','Jan 16','Jan 17',
+                     'Jan 20','Jan 21','Jan 22','Jan 23','Jan 24',
+                     'Jan 27','Jan 28','Jan 29'];
+        for (var i = 0; i < days.length; i++) {
+            var open = price + (Math.random() - 0.5) * 5;
+            var close = open + (Math.random() - 0.45) * 8;
+            var high = Math.max(open, close) + Math.random() * 4;
+            var low = Math.min(open, close) - Math.random() * 4;
+            ohlcData.push({
+                date: days[i],
+                open: Math.round(open * 100) / 100,
+                high: Math.round(high * 100) / 100,
+                low: Math.round(low * 100) / 100,
+                close: Math.round(close * 100) / 100
+            });
+            price = close;
+        }
+        czChart.create('#chart-candle', {
+            type: 'candlestick',
+            data: ohlcData,
+            x: 'date',
+            y: ['open', 'high', 'low', 'close'],
+            yAxis: { title: 'Price (USD)', beginAtZero: false },
+            candlestick: {
+                bullishColor: '#10b981',
+                bearishColor: '#ef4444'
+            }
+        });
+    })();
+
+    // =========================================================
+    // FUNNEL CHART — Sales Pipeline
+    // =========================================================
+    czChart.create('#chart-funnel', {
+        type: 'funnel',
+        data: [
+            { stage: 'Visitors',   count: 12000 },
+            { stage: 'Leads',      count: 5200 },
+            { stage: 'Qualified',  count: 2800 },
+            { stage: 'Proposals',  count: 1500 },
+            { stage: 'Negotiation', count: 800 },
+            { stage: 'Closed Won', count: 450 }
+        ],
+        x: 'stage',
+        y: 'count'
+    });
+
+    // =========================================================
+    // HEATMAP CHART — Weekly Activity
+    // =========================================================
+    czChart.create('#chart-heatmap', {
+        type: 'heatmap',
+        data: [
+            { hour: '9am',  Mon: 2, Tue: 5, Wed: 8, Thu: 4, Fri: 3 },
+            { hour: '10am', Mon: 5, Tue: 8, Wed: 12, Thu: 7, Fri: 6 },
+            { hour: '11am', Mon: 8, Tue: 12, Wed: 15, Thu: 10, Fri: 9 },
+            { hour: '12pm', Mon: 4, Tue: 6, Wed: 8, Thu: 5, Fri: 3 },
+            { hour: '1pm',  Mon: 3, Tue: 4, Wed: 6, Thu: 4, Fri: 2 },
+            { hour: '2pm',  Mon: 7, Tue: 10, Wed: 14, Thu: 9, Fri: 8 },
+            { hour: '3pm',  Mon: 9, Tue: 13, Wed: 16, Thu: 11, Fri: 10 },
+            { hour: '4pm',  Mon: 6, Tue: 9, Wed: 11, Thu: 8, Fri: 5 },
+            { hour: '5pm',  Mon: 3, Tue: 5, Wed: 7, Thu: 4, Fri: 2 }
+        ],
+        x: 'hour',
+        y: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+        heatmap: {
+            colorScale: ['#f0fdf4', '#10b981'],
+            showValues: true
+        }
+    });
 
     // =========================================================
     // CSV DATA
