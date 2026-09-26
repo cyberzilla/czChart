@@ -24,7 +24,8 @@
       ctx.textBaseline = 'top';
 
       let lastRightEdge = -Infinity;
-      const minGap = 8;
+      // Only skip labels that truly overlap — 2px breathing room
+      const minGap = 2;
 
       ticks.forEach(tick => {
         const x = tick.pixel;
@@ -32,7 +33,7 @@
 
         const textWidth = ctx.measureText(tick.label).width;
 
-        // Smart overlap prevention
+        // Smart overlap prevention — only skip if labels truly collide
         if (!rotation && (x - textWidth / 2) < lastRightEdge + minGap) return;
 
         ctx.save();

@@ -2,7 +2,7 @@
  * czChart v1.0.0 — Lightweight, Data-Driven Chart Library
  * (c) 2026 CyberZilla
  * Released under the MIT License
- * Built: 2026-09-26T05:23:21.203Z
+ * Built: 2026-09-26T05:34:16.252Z
  */
 
 (function(global) {
@@ -586,7 +586,7 @@ const DEFAULTS = {
         tickColor: '#6b7280',
         labelFont: '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         labelColor: '#6b7280',
-        maxTicks: 10,
+        maxTicks: 0,
         rotation: 0,
         title: null      // e.g. 'Bulan'
     },
@@ -1596,7 +1596,8 @@ window.CZ.State = State;
       ctx.textBaseline = 'top';
 
       let lastRightEdge = -Infinity;
-      const minGap = 8;
+      // Only skip labels that truly overlap — 2px breathing room
+      const minGap = 2;
 
       ticks.forEach(tick => {
         const x = tick.pixel;
@@ -1604,7 +1605,7 @@ window.CZ.State = State;
 
         const textWidth = ctx.measureText(tick.label).width;
 
-        // Smart overlap prevention
+        // Smart overlap prevention — only skip if labels truly collide
         if (!rotation && (x - textWidth / 2) < lastRightEdge + minGap) return;
 
         ctx.save();

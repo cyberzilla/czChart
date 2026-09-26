@@ -19,7 +19,7 @@ const DEFAULTS = {
         tickColor: '#6b7280',
         labelFont: '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         labelColor: '#6b7280',
-        maxTicks: 10,
+        maxTicks: 0,
         rotation: 0,
         title: null      // e.g. 'Bulan'
     },
