@@ -81,6 +81,11 @@
         .badge-candle { background: #f0fdf4; color: #166534; }
         .badge-funnel { background: #fdf2f8; color: #9d174d; }
         .badge-heatmap { background: #fff7ed; color: #c2410c; }
+        .badge-waterfall { background: #ecfdf5; color: #065f46; }
+        .badge-bubble { background: #eff6ff; color: #1e40af; }
+        .badge-treemap { background: #fef3c7; color: #92400e; }
+        .badge-boxplot { background: #f5f3ff; color: #5b21b6; }
+        .badge-polar { background: #fce7f3; color: #9d174d; }
         .badge-new { background: #dcfce7; color: #15803d; font-size: 9px; vertical-align: top; }
         .full-width { grid-column: 1 / -1; }
         .section-title {
@@ -281,6 +286,68 @@
   heatmap: {
     colorScale: ['#3b82f6','#06b6d4','#10b981','#f59e0b','#ef4444']
   }
+});</code></pre>
+        </div>
+
+        <!-- WATERFALL CHART -->
+        <div class="card full-width">
+            <h2>Waterfall Chart <span class="badge badge-waterfall">WATERFALL</span> <span class="badge badge-new">NEW</span></h2>
+            <p>Revenue breakdown — cumulative positive/negative changes</p>
+            <div id="chart-waterfall" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-waterfall', {
+  type: 'waterfall',
+  data: [...],
+  x: 'item', y: 'amount'
+});</code></pre>
+        </div>
+
+        <!-- BUBBLE CHART -->
+        <div class="card">
+            <h2>Bubble Chart <span class="badge badge-bubble">BUBBLE</span> <span class="badge badge-new">NEW</span></h2>
+            <p>GDP vs Life Expectancy — bubble size = population</p>
+            <div id="chart-bubble" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-bubble', {
+  type: 'bubble',
+  data: [...],
+  x: 'gdp', y: 'life_exp',
+  bubble: { sizeKey: 'population' }
+});</code></pre>
+        </div>
+
+        <!-- TREEMAP CHART -->
+        <div class="card">
+            <h2>Treemap <span class="badge badge-treemap">TREEMAP</span> <span class="badge badge-new">NEW</span></h2>
+            <p>Market cap — proportional nested rectangles</p>
+            <div id="chart-treemap" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-treemap', {
+  type: 'treemap',
+  data: [...],
+  x: 'sector', y: 'market_cap'
+});</code></pre>
+        </div>
+
+        <!-- BOXPLOT CHART -->
+        <div class="card full-width">
+            <h2>Box Plot <span class="badge badge-boxplot">BOXPLOT</span> <span class="badge badge-new">NEW</span></h2>
+            <p>Test scores distribution — min, Q1, median, Q3, max per subject</p>
+            <div id="chart-boxplot" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-boxplot', {
+  type: 'boxplot',
+  data: [...],
+  x: 'subject',
+  y: ['min','q1','median','q3','max']
+});</code></pre>
+        </div>
+
+        <!-- POLAR CHART -->
+        <div class="card">
+            <h2>Polar / Rose <span class="badge badge-polar">POLAR</span> <span class="badge badge-new">NEW</span></h2>
+            <p>Team skills — radial bar sectors</p>
+            <div id="chart-polar" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-polar', {
+  type: 'polar',
+  data: [...],
+  x: 'skill', y: 'score'
 });</code></pre>
         </div>
 
@@ -596,6 +663,109 @@
             colorScale: ['#3b82f6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444'],
             showValues: true
         }
+    });
+
+    // =========================================================
+    // WATERFALL CHART — Revenue Breakdown
+    // =========================================================
+    czChart.create('#chart-waterfall', {
+        type: 'waterfall',
+        data: [
+            { item: 'Revenue',      amount: 12000 },
+            { item: 'COGS',         amount: -4500 },
+            { item: 'Gross Profit', amount: 0 },
+            { item: 'Marketing',    amount: -1800 },
+            { item: 'Salaries',     amount: -3200 },
+            { item: 'R&D',          amount: -1200 },
+            { item: 'Other',        amount: -500 },
+            { item: 'Net Profit',   amount: 0 }
+        ],
+        x: 'item',
+        y: 'amount',
+        waterfall: { totalIndexes: [2, 7] },
+        yAxis: { title: 'Amount (USD)' }
+    });
+
+    // =========================================================
+    // BUBBLE CHART — GDP vs Life Expectancy
+    // =========================================================
+    czChart.create('#chart-bubble', {
+        type: 'bubble',
+        data: [
+            { gdp: 63, life_exp: 78.9, population: 331, color: '#ef4444' },
+            { gdp: 42, life_exp: 83.4, population: 126, color: '#f97316' },
+            { gdp: 46, life_exp: 81.3, population: 83,  color: '#eab308' },
+            { gdp: 40, life_exp: 82.7, population: 67,  color: '#22c55e' },
+            { gdp: 10, life_exp: 69.7, population: 1380, color: '#14b8a6' },
+            { gdp: 12, life_exp: 76.9, population: 1440, color: '#3b82f6' },
+            { gdp: 8,  life_exp: 75.5, population: 274, color: '#8b5cf6' },
+            { gdp: 35, life_exp: 82.3, population: 52,  color: '#ec4899' },
+            { gdp: 9,  life_exp: 72.6, population: 213, color: '#06b6d4' },
+            { gdp: 48, life_exp: 83.6, population: 26,  color: '#84cc16' }
+        ],
+        x: 'gdp',
+        y: 'life_exp',
+        bubble: { sizeKey: 'population' },
+        xAxis: { title: 'GDP per Capita (K USD)' },
+        yAxis: { title: 'Life Expectancy' }
+    });
+
+    // =========================================================
+    // TREEMAP — Market Cap by Sector
+    // =========================================================
+    czChart.create('#chart-treemap', {
+        type: 'treemap',
+        data: [
+            { sector: 'Technology',    market_cap: 3200 },
+            { sector: 'Healthcare',    market_cap: 1800 },
+            { sector: 'Finance',       market_cap: 1500 },
+            { sector: 'Consumer',      market_cap: 1200 },
+            { sector: 'Energy',        market_cap: 900 },
+            { sector: 'Industrial',    market_cap: 750 },
+            { sector: 'Real Estate',   market_cap: 500 },
+            { sector: 'Telecom',       market_cap: 400 },
+            { sector: 'Utilities',     market_cap: 350 },
+            { sector: 'Materials',     market_cap: 300 }
+        ],
+        x: 'sector',
+        y: 'market_cap'
+    });
+
+    // =========================================================
+    // BOX PLOT — Test Score Distribution
+    // =========================================================
+    czChart.create('#chart-boxplot', {
+        type: 'boxplot',
+        data: [
+            { subject: 'Math',     min: 35, q1: 55, median: 72, q3: 85, max: 98 },
+            { subject: 'Science',  min: 40, q1: 58, median: 68, q3: 82, max: 95 },
+            { subject: 'English',  min: 30, q1: 52, median: 65, q3: 78, max: 92 },
+            { subject: 'History',  min: 25, q1: 48, median: 62, q3: 75, max: 90 },
+            { subject: 'Art',      min: 45, q1: 62, median: 75, q3: 88, max: 100 },
+            { subject: 'Music',    min: 38, q1: 55, median: 70, q3: 83, max: 96 }
+        ],
+        x: 'subject',
+        y: ['min', 'q1', 'median', 'q3', 'max'],
+        yAxis: { title: 'Score' }
+    });
+
+    // =========================================================
+    // POLAR / ROSE — Team Skills
+    // =========================================================
+    czChart.create('#chart-polar', {
+        type: 'polar',
+        data: [
+            { skill: 'Leadership',      score: 85 },
+            { skill: 'Communication',   score: 95 },
+            { skill: 'Technical',       score: 60 },
+            { skill: 'Creativity',      score: 75 },
+            { skill: 'Teamwork',        score: 100 },
+            { skill: 'Problem Solving', score: 45 },
+            { skill: 'Time Mgmt',       score: 35 },
+            { skill: 'Adaptability',    score: 70 }
+        ],
+        x: 'skill',
+        y: 'score'
     });
 
     // =========================================================

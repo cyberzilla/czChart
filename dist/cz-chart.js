@@ -2,7 +2,7 @@
  * czChart v1.0.0 — Lightweight, Data-Driven Chart Library
  * (c) 2026 CyberZilla
  * Released under the MIT License
- * Built: 2026-09-26T05:34:16.252Z
+ * Built: 2026-09-26T07:53:31.586Z
  */
 
 (function(global) {
@@ -4905,6 +4905,1150 @@ window.CZ.HeatmapSeries = HeatmapSeries;
 
 
 // ============================================================
+// src/render/series/WaterfallSeries.js
+// ============================================================
+
+(function(CZ) {
+    class WaterfallSeries {
+        constructor(chart, options = {}) {
+            this.chart = chart;
+            this.options = Object.assign({
+                visible: true,
+                datasetIndex: 0,
+                positiveColor: '#10b981',
+                negativeColor: '#ef4444',
+                totalColor: '#3b82f6',
+                connectorColor: '#94a3b8',
+                connectorWidth: 1,
+                borderRadius: 4,
+                barWidthRatio: 0.6,
+                showConnectors: true,
+                totalIndexes: null // auto-detect or [index1, index2]
+            }, options);
+            this.visible = this.options.visible;
+            this.dataset = null;
+            this._bars = [];
+        }
+
+        setData(dataset) {
+            this.dataset = dataset;
+        }
+
+        getBounds() {
+            if (!this.dataset || !this.dataset.values) return { minY: 0, maxY: 0 };
+            const values = this.dataset.values;
+            const totals = this._getTotalIndexes(values);
+            let runningTotal = 0;
+            let minY = 0, maxY = 0;
+
+            for (let i = 0; i < values.length; i++) {
+                if (totals.has(i)) {
+                    // Total bar goes from 0 to runningTotal
+                    minY = Math.min(minY, 0, runningTotal);
+                    maxY = Math.max(maxY, 0, runningTotal);
+                } else {
+                    const prev = runningTotal;
+                    runningTotal += values[i];
+                    minY = Math.min(minY, prev, runningTotal);
+                    maxY = Math.max(maxY, prev, runningTotal);
+                }
+            }
+            return { minY, maxY };
+        }
+
+        _getTotalIndexes(values) {
+            if (this.options.totalIndexes) {
+                return new Set(this.options.totalIndexes);
+            }
+            // Auto-detect: last item is total if it roughly equals sum of previous
+            const set = new Set();
+            if (values.length > 1) {
+                const sum = values.slice(0, -1).reduce((a, b) => a + b, 0);
+                if (Math.abs(values[values.length - 1] - sum) < 0.01) {
+                    set.add(values.length - 1);
+                }
+            }
+            return set;
+        }
+
+        getLegendItems() {
+            return [{
+                name: this.dataset ? this.dataset.name : 'Waterfall',
+                color: this.options.totalColor,
+                visible: this.visible,
+                datasetIndex: this.options.datasetIndex
+            }];
+        }
+
+        draw(ctx, plotArea, xScale, yScale, progress) {
+            if (!this.visible || !this.dataset || !this.dataset.values) return;
+
+            const values = this.dataset.values;
+            const labels = (this.chart.normalizedData && this.chart.normalizedData.labels) || [];
+            const totals = this._getTotalIndexes(values);
+            const bandWidth = xScale.getBandWidth();
+            const barWidth = bandWidth * this.options.barWidthRatio;
+            const radius = this.options.borderRadius;
+
+            this._bars = [];
+            let runningTotal = 0;
+
+            ctx.save();
+            ctx.globalAlpha = progress;
+
+            for (let i = 0; i < values.length; i++) {
+                const val = values[i];
+                const cx = xScale.getPixel(i);
+                let barTop, barBottom, color;
+
+                if (totals.has(i)) {
+                    // Total bar: from 0 to runningTotal
+                    barTop = yScale.getPixel(Math.max(0, runningTotal));
+                    barBottom = yScale.getPixel(Math.min(0, runningTotal));
+                    color = this.options.totalColor;
+                } else {
+                    const prevTotal = runningTotal;
+                    runningTotal += val;
+                    barTop = yScale.getPixel(Math.max(prevTotal, runningTotal));
+                    barBottom = yScale.getPixel(Math.min(prevTotal, runningTotal));
+                    color = val >= 0 ? this.options.positiveColor : this.options.negativeColor;
+                }
+
+                // Support custom colors
+                if (this.dataset.pointColors && this.dataset.pointColors[i]) {
+                    color = this.dataset.pointColors[i];
+                }
+
+                const x = cx - barWidth / 2;
+                const y = barTop;
+                const w = barWidth;
+                const h = Math.max(1, barBottom - barTop);
+
+                // Draw bar
+                ctx.beginPath();
+                if (ctx.roundRect) {
+                    ctx.roundRect(x, y, w, h, radius);
+                } else {
+                    ctx.rect(x, y, w, h);
+                }
+                ctx.fillStyle = color;
+                ctx.fill();
+
+                this._bars.push({
+                    index: i,
+                    x, y, w, h, color,
+                    value: val,
+                    runningTotal: totals.has(i) ? runningTotal : runningTotal,
+                    isTotal: totals.has(i),
+                    label: labels[i] || `Item ${i + 1}`
+                });
+
+                // Draw connector line to next bar
+                if (this.options.showConnectors && i < values.length - 1 && !totals.has(i)) {
+                    const nextCx = xScale.getPixel(i + 1);
+                    const connectorY = yScale.getPixel(runningTotal);
+                    ctx.beginPath();
+                    ctx.setLineDash([3, 3]);
+                    ctx.strokeStyle = this.options.connectorColor;
+                    ctx.lineWidth = this.options.connectorWidth;
+                    ctx.moveTo(cx + barWidth / 2, connectorY);
+                    ctx.lineTo(nextCx - barWidth / 2, connectorY);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+            }
+
+            ctx.restore();
+        }
+
+        drawHover(ctx, plotArea, xScale, yScale, index) {
+            if (!this._bars || !this._bars[index]) return;
+            const bar = this._bars[index];
+            ctx.save();
+            ctx.shadowColor = 'rgba(0,0,0,0.3)';
+            ctx.shadowBlur = 8;
+            ctx.shadowOffsetY = 3;
+            ctx.beginPath();
+            if (ctx.roundRect) {
+                ctx.roundRect(bar.x, bar.y, bar.w, bar.h, this.options.borderRadius);
+            } else {
+                ctx.rect(bar.x, bar.y, bar.w, bar.h);
+            }
+            ctx.fillStyle = bar.color;
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        hitTest(mouseX, mouseY) {
+            if (!this._bars) return null;
+            for (const bar of this._bars) {
+                if (mouseX >= bar.x && mouseX <= bar.x + bar.w &&
+                    mouseY >= bar.y && mouseY <= bar.y + bar.h) {
+                    return {
+                        series: this,
+                        index: bar.index,
+                        value: bar.value,
+                        x: bar.x + bar.w / 2,
+                        y: bar.y,
+                        label: bar.label,
+                        seriesName: this.dataset.name,
+                        color: bar.color,
+                        datasetIndex: this.options.datasetIndex
+                    };
+                }
+            }
+            return null;
+        }
+    }
+
+    if (typeof window !== 'undefined') {
+        window.CZ = window.CZ || {};
+        window.CZ.WaterfallSeries = WaterfallSeries;
+    }
+})((typeof window !== 'undefined' ? (window.CZ = window.CZ || {}) : {}));
+
+
+// ============================================================
+// src/render/series/BubbleSeries.js
+// ============================================================
+
+(function(CZ) {
+    class BubbleSeries {
+        constructor(chart, options = {}) {
+            this.chart = chart;
+            this.options = Object.assign({
+                visible: true,
+                datasetIndex: 0,
+                minRadius: 5,
+                maxRadius: 40,
+                fillAlpha: 0.6,
+                sizeKey: 'size',
+                borderWidth: 2
+            }, options);
+            this.visible = this.options.visible;
+            this.dataset = null;
+            this._bubbles = [];
+            this._sizes = [];
+        }
+
+        setData(dataset) {
+            this.dataset = dataset;
+            this._sizes = [];
+
+            // Extract sizes from raw data
+            const rawData = this.chart.normalizedData && this.chart.normalizedData.rawData;
+            if (Array.isArray(rawData)) {
+                const sizeKey = this.options.sizeKey;
+                this._sizes = rawData.map(d => (d && typeof d === 'object') ? (parseFloat(d[sizeKey]) || 0) : 0);
+            }
+        }
+
+        getBounds() {
+            if (!this.dataset || !this.dataset.values) return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+            const values = this.dataset.values;
+            const labels = (this.chart.normalizedData && this.chart.normalizedData.labels) || [];
+            
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            for (let i = 0; i < values.length; i++) {
+                const x = parseFloat(labels[i]) || i;
+                const y = values[i];
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+            }
+            if (minX === Infinity) return { minX: 0, maxX: 100, minY: 0, maxY: 100 };
+            const padY = (maxY - minY) * 0.1;
+            const padX = (maxX - minX) * 0.1;
+            return { minX: minX - padX, maxX: maxX + padX, minY: minY - padY, maxY: maxY + padY };
+        }
+
+        getLegendItems() {
+            return [{
+                name: this.dataset ? this.dataset.name : 'Bubble',
+                color: this.dataset ? this.dataset.color : '#000',
+                visible: this.visible,
+                datasetIndex: this.options.datasetIndex
+            }];
+        }
+
+        _getRadius(sizeVal) {
+            if (this._sizes.length === 0) return this.options.minRadius;
+            const sizeMin = Math.min(...this._sizes.filter(s => s > 0));
+            const sizeMax = Math.max(...this._sizes);
+            if (sizeMax === sizeMin) return (this.options.minRadius + this.options.maxRadius) / 2;
+            const t = (sizeVal - sizeMin) / (sizeMax - sizeMin);
+            // Scale by area (square root) for perceptual accuracy
+            return this.options.minRadius + Math.sqrt(t) * (this.options.maxRadius - this.options.minRadius);
+        }
+
+        _hexToRgba(hex, alpha) {
+            let h = hex.replace(/^#/, '');
+            if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+            const num = parseInt(h, 16);
+            const r = (num >> 16) & 255, g = (num >> 8) & 255, b = num & 255;
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+
+        _resolveColor(color) {
+            if (!color) return '#3b82f6';
+            if (color.startsWith('#')) return color;
+            if (color.startsWith('rgb')) {
+                const m = color.match(/\d+/g);
+                if (m && m.length >= 3) {
+                    return '#' + [m[0],m[1],m[2]].map(v => parseInt(v).toString(16).padStart(2,'0')).join('');
+                }
+            }
+            return color;
+        }
+
+        draw(ctx, plotArea, xScale, yScale, progress) {
+            if (!this.visible || !this.dataset || !this.dataset.values) return;
+
+            const values = this.dataset.values;
+            const labels = (this.chart.normalizedData && this.chart.normalizedData.labels) || [];
+            const baseColor = this._resolveColor(this.dataset.color || '#3b82f6');
+
+            this._bubbles = [];
+
+            ctx.save();
+
+            for (let i = 0; i < values.length; i++) {
+                const xVal = parseFloat(labels[i]) || i;
+                const yVal = values[i];
+                const sizeVal = this._sizes[i] || 0;
+
+                const px = xScale.getPixel(xVal);
+                const py = yScale.getPixel(yVal);
+                const r = Math.max(0, this._getRadius(sizeVal) * progress);
+
+                if (px < plotArea.left - r || px > plotArea.right + r) continue;
+                if (py < plotArea.top - r || py > plotArea.bottom + r) continue;
+
+                const color = (this.dataset.pointColors && this.dataset.pointColors[i])
+                    ? this._resolveColor(this.dataset.pointColors[i])
+                    : baseColor;
+
+                ctx.beginPath();
+                ctx.arc(px, py, r, 0, Math.PI * 2);
+                ctx.fillStyle = this._hexToRgba(color, this.options.fillAlpha);
+                ctx.fill();
+                ctx.lineWidth = this.options.borderWidth;
+                ctx.strokeStyle = color;
+                ctx.stroke();
+
+                this._bubbles.push({
+                    index: i, x: px, y: py, r, color,
+                    value: yVal, size: sizeVal,
+                    label: labels[i] || `Point ${i + 1}`
+                });
+            }
+
+            ctx.restore();
+        }
+
+        drawHover(ctx, plotArea, xScale, yScale, index) {
+            const bubble = this._bubbles.find(b => b.index === index);
+            if (!bubble) return;
+
+            ctx.save();
+            ctx.shadowColor = 'rgba(0,0,0,0.3)';
+            ctx.shadowBlur = 10;
+            ctx.beginPath();
+            ctx.arc(bubble.x, bubble.y, bubble.r * 1.1, 0, Math.PI * 2);
+            ctx.fillStyle = this._hexToRgba(bubble.color, 0.8);
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = bubble.color;
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        hitTest(mouseX, mouseY) {
+            if (!this._bubbles) return null;
+            // Check from last (top) to first
+            for (let i = this._bubbles.length - 1; i >= 0; i--) {
+                const b = this._bubbles[i];
+                const dx = mouseX - b.x;
+                const dy = mouseY - b.y;
+                if (dx * dx + dy * dy <= b.r * b.r) {
+                    return {
+                        series: this,
+                        index: b.index,
+                        value: b.value,
+                        x: b.x, y: b.y,
+                        label: b.label,
+                        seriesName: this.dataset.name,
+                        color: b.color,
+                        datasetIndex: this.options.datasetIndex
+                    };
+                }
+            }
+            return null;
+        }
+    }
+
+    if (typeof window !== 'undefined') {
+        window.CZ = window.CZ || {};
+        window.CZ.BubbleSeries = BubbleSeries;
+    }
+})((typeof window !== 'undefined' ? (window.CZ = window.CZ || {}) : {}));
+
+
+// ============================================================
+// src/render/series/TreemapSeries.js
+// ============================================================
+
+class TreemapSeries {
+    constructor(chart, options = {}) {
+        this.chart = chart;
+        this.options = Object.assign({
+            visible: true,
+            datasetIndex: 0
+        }, options);
+        this.visible = this.options.visible;
+        this.dataset = null;
+        this._hiddenSlices = new Set();
+        this._highlightSlice = null;
+        this._rects = [];
+    }
+
+    setData(dataset) {
+        this.dataset = dataset;
+        this._colors = [];
+        for (let i = 0; i < dataset.values.length; i++) {
+            if (dataset.pointColors && dataset.pointColors[i]) {
+                this._colors.push(dataset.pointColors[i]);
+            } else {
+                this._colors.push(window.CZ.ColorUtils.getSeriesColor(i));
+            }
+        }
+    }
+
+    getBounds() {
+        return null;
+    }
+
+    getLegendItems() {
+        if (!this.dataset || !this.dataset.values) return [];
+        const labels = (this.chart.normalizedData && this.chart.normalizedData.labels) || [];
+        return this.dataset.values.map((v, i) => ({
+            name: labels[i] || `Item ${i}`,
+            color: this._colors[i],
+            visible: !this._hiddenSlices.has(i),
+            datasetIndex: i
+        }));
+    }
+
+    animateSliceToggle(index, onComplete) {
+        if (this._hiddenSlices.has(index)) {
+            this._hiddenSlices.delete(index);
+        } else {
+            this._hiddenSlices.add(index);
+        }
+        if (typeof onComplete === 'function') onComplete();
+    }
+
+    draw(ctx, plotArea, xScale, yScale, progress = 1) {
+        if (!this.visible || !this.dataset || !this.dataset.values) return;
+
+        const labels = (this.chart.normalizedData && this.chart.normalizedData.labels) || [];
+        
+        let total = 0;
+        const items = [];
+        for (let i = 0; i < this.dataset.values.length; i++) {
+            if (this._hiddenSlices.has(i)) continue;
+            let val = this.dataset.values[i];
+            if (val > 0) {
+                total += val;
+                items.push({
+                    index: i,
+                    value: val,
+                    label: labels[i] || `Item ${i}`,
+                    color: this._colors[i]
+                });
+            }
+        }
+
+        if (total === 0) return;
+
+        // Sort values descending for squarified layout
+        items.sort((a, b) => b.value - a.value);
+
+        // Compute squarified treemap layout
+        this._rects = [];
+        this._squarify(items, [], {
+            x: plotArea.left,
+            y: plotArea.top,
+            w: plotArea.width,
+            h: plotArea.height
+        }, total);
+
+        const R = 12;
+        const x0 = plotArea.left;
+        const y0 = plotArea.top;
+        const w0 = plotArea.width;
+        const h0 = plotArea.height;
+
+        ctx.save();
+
+        // Clip with smooth rounded rect
+        ctx.beginPath();
+        ctx.moveTo(x0 + R, y0);
+        ctx.lineTo(x0 + w0 - R, y0);
+        ctx.quadraticCurveTo(x0 + w0, y0, x0 + w0, y0 + R);
+        ctx.lineTo(x0 + w0, y0 + h0 - R);
+        ctx.quadraticCurveTo(x0 + w0, y0 + h0, x0 + w0 - R, y0 + h0);
+        ctx.lineTo(x0 + R, y0 + h0);
+        ctx.quadraticCurveTo(x0, y0 + h0, x0, y0 + h0 - R);
+        ctx.lineTo(x0, y0 + R);
+        ctx.quadraticCurveTo(x0, y0, x0 + R, y0);
+        ctx.closePath();
+        ctx.clip();
+
+        // Draw rects inside clipped area
+        for (let i = 0; i < this._rects.length; i++) {
+            const rect = this._rects[i];
+            const gap = 1;
+            const rx = rect.x + gap;
+            const ry = rect.y + gap;
+            const rw = Math.max(0, rect.w - gap * 2);
+            const rh = Math.max(0, rect.h - gap * 2);
+            if (rw <= 0 || rh <= 0) continue;
+
+            const animW = rw * progress;
+            const animH = rh * progress;
+            const cxr = rx + rw / 2;
+            const cyr = ry + rh / 2;
+            const currentX = cxr - animW / 2;
+            const currentY = cyr - animH / 2;
+            if (animW <= 0 || animH <= 0) continue;
+
+            let alpha = 1;
+            if (this._highlightSlice >= 0 && this._highlightSlice !== rect.index) {
+                alpha = 0.15;
+            }
+
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = rect.color;
+            ctx.fillRect(currentX, currentY, animW, animH);
+
+            if (animW >= 40 && animH >= 20) {
+                ctx.fillStyle = '#ffffff';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.font = 'bold 12px sans-serif';
+                ctx.fillText(rect.label, cxr, cyr - 6);
+                ctx.font = '11px sans-serif';
+                ctx.fillText(rect.value.toString(), cxr, cyr + 8);
+            }
+        }
+
+        ctx.restore();
+    }
+
+    _squarify(children, row, rect, totalVal) {
+        if (children.length === 0) {
+            if (row.length > 0) {
+                this._layoutRow(row, rect, totalVal);
+            }
+            return;
+        }
+
+        const child = children[0];
+        const newRow = row.slice();
+        newRow.push(child);
+
+        const currentRatio = this._worstRatio(row, rect, totalVal);
+        const newRatio = this._worstRatio(newRow, rect, totalVal);
+
+        if (row.length === 0 || newRatio <= currentRatio) {
+            children.shift();
+            this._squarify(children, newRow, rect, totalVal);
+        } else {
+            const newRect = this._layoutRow(row, rect, totalVal);
+            const rowVal = row.reduce((sum, item) => sum + item.value, 0);
+            this._squarify(children, [], newRect, totalVal - rowVal);
+        }
+    }
+
+    _worstRatio(row, rect, totalVal) {
+        if (row.length === 0) return Infinity;
+        
+        const area = (rect.w * rect.h);
+        const rowArea = (row.reduce((sum, item) => sum + item.value, 0) / totalVal) * area;
+        
+        let minArea = Infinity;
+        let maxArea = -Infinity;
+        
+        row.forEach(item => {
+            const itemArea = (item.value / totalVal) * area;
+            if (itemArea < minArea) minArea = itemArea;
+            if (itemArea > maxArea) maxArea = itemArea;
+        });
+
+        const length = Math.max(rect.w, rect.h);
+        const rowWidth = rowArea / length;
+        
+        if (rowWidth === 0) return Infinity;
+
+        return Math.max(
+            (rowWidth * rowWidth) / minArea,
+            maxArea / (rowWidth * rowWidth)
+        );
+    }
+
+    _layoutRow(row, rect, totalVal) {
+        const area = rect.w * rect.h;
+        const rowVal = row.reduce((sum, item) => sum + item.value, 0);
+        const rowArea = (rowVal / totalVal) * area;
+        
+        const isHorizontal = rect.w >= rect.h;
+        const rowWidth = isHorizontal ? rowArea / rect.h : rowArea / rect.w;
+        
+        let x = rect.x;
+        let y = rect.y;
+
+        row.forEach(item => {
+            const itemArea = (item.value / totalVal) * area;
+            let w, h;
+            
+            if (isHorizontal) {
+                w = rowWidth;
+                h = itemArea / w;
+                this._rects.push({
+                    x: x, y: y, w: w, h: h,
+                    index: item.index, value: item.value, label: item.label, color: item.color
+                });
+                y += h;
+            } else {
+                h = rowWidth;
+                w = itemArea / h;
+                this._rects.push({
+                    x: x, y: y, w: w, h: h,
+                    index: item.index, value: item.value, label: item.label, color: item.color
+                });
+                x += w;
+            }
+        });
+
+        if (isHorizontal) {
+            return { x: rect.x + rowWidth, y: rect.y, w: Math.max(0, rect.w - rowWidth), h: rect.h };
+        } else {
+            return { x: rect.x, y: rect.y + rowWidth, w: rect.w, h: Math.max(0, rect.h - rowWidth) };
+        }
+    }
+
+    drawHover(ctx, plotArea, xScale, yScale, index) {
+        const rect = this._rects.find(r => r.index === index);
+        if (!rect) return;
+
+        const gap = 1;
+        const rx = rect.x + gap;
+        const ry = rect.y + gap;
+        const rw = Math.max(0, rect.w - gap * 2);
+        const rh = Math.max(0, rect.h - gap * 2);
+        const radius = Math.min(4, rw / 2, rh / 2);
+
+        if (rw <= 0 || rh <= 0) return;
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.beginPath();
+        ctx.moveTo(rx + radius, ry);
+        ctx.lineTo(rx + rw - radius, ry);
+        ctx.quadraticCurveTo(rx + rw, ry, rx + rw, ry + radius);
+        ctx.lineTo(rx + rw, ry + rh - radius);
+        ctx.quadraticCurveTo(rx + rw, ry + rh, rx + rw - radius, ry + rh);
+        ctx.lineTo(rx + radius, ry + rh);
+        ctx.quadraticCurveTo(rx, ry + rh, rx, ry + rh - radius);
+        ctx.lineTo(rx, ry + radius);
+        ctx.quadraticCurveTo(rx, ry, rx + radius, ry);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+
+    hitTest(mouseX, mouseY, plotArea, xScale, yScale) {
+        if (!this.visible || !this._rects) return null;
+
+        for (let i = 0; i < this._rects.length; i++) {
+            const rect = this._rects[i];
+            const gap = 1;
+            const rx = rect.x + gap;
+            const ry = rect.y + gap;
+            const rw = rect.w - gap * 2;
+            const rh = rect.h - gap * 2;
+            
+            if (mouseX >= rx && mouseX <= rx + rw &&
+                mouseY >= ry && mouseY <= ry + rh) {
+                return {
+                    x: mouseX,
+                    y: mouseY,
+                    index: rect.index,
+                    value: rect.value,
+                    label: rect.label,
+                    seriesName: (this.dataset && this.dataset.name) || 'Treemap',
+                    color: rect.color
+                };
+            }
+        }
+        return null;
+    }
+}
+
+if (typeof window !== 'undefined') {
+    window.CZ = window.CZ || {};
+    window.CZ.TreemapSeries = TreemapSeries;
+}
+
+
+// ============================================================
+// src/render/series/BoxPlotSeries.js
+// ============================================================
+
+(function(CZ) {
+    class BoxPlotSeries {
+        constructor(chart, options = {}) {
+            this.chart = chart;
+            this.options = Object.assign({
+                visible: true,
+                datasetIndex: 0,
+                boxWidthRatio: 0.5,
+                medianColor: null,
+                medianWidth: 2,
+                whiskerColor: '#666666',
+                whiskerWidth: 1,
+                capWidth: 0.3
+            }, options);
+            this.visible = this.options.visible;
+            this.dataset = null;
+            this._boxes = [];
+        }
+
+        setData(dataset) {
+            this.dataset = dataset;
+            this._boxData = [];
+
+            // Try to get boxData from dataset
+            if (dataset.boxData) {
+                this._boxData = dataset.boxData;
+                return;
+            }
+
+            // Try to compute from rawData
+            const rawData = this.chart.normalizedData && this.chart.normalizedData.rawData;
+            if (Array.isArray(rawData)) {
+                this._boxData = rawData.map(d => {
+                    if (d && typeof d === 'object') {
+                        return {
+                            min: parseFloat(d.min) || 0,
+                            q1: parseFloat(d.q1) || 0,
+                            median: parseFloat(d.median) || 0,
+                            q3: parseFloat(d.q3) || 0,
+                            max: parseFloat(d.max) || 0
+                        };
+                    }
+                    return null;
+                }).filter(Boolean);
+            }
+        }
+
+        getBounds() {
+            if (!this._boxData || this._boxData.length === 0) return { minY: 0, maxY: 0 };
+            let minY = Infinity, maxY = -Infinity;
+            for (const b of this._boxData) {
+                if (b.min < minY) minY = b.min;
+                if (b.max > maxY) maxY = b.max;
+            }
+            const pad = (maxY - minY) * 0.05;
+            return { minY: minY - pad, maxY: maxY + pad };
+        }
+
+        getLegendItems() {
+            return [{
+                name: this.dataset ? this.dataset.name : 'Box Plot',
+                color: this.dataset ? this.dataset.color : '#3b82f6',
+                visible: this.visible,
+                datasetIndex: this.options.datasetIndex
+            }];
+        }
+
+        _hexToRgba(hex, alpha) {
+            if (!hex || !hex.startsWith('#')) return `rgba(59, 130, 246, ${alpha})`;
+            let h = hex.replace(/^#/, '');
+            if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+            const num = parseInt(h, 16);
+            const r = (num >> 16) & 255, g = (num >> 8) & 255, b = num & 255;
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+
+        draw(ctx, plotArea, xScale, yScale, progress) {
+            if (!this.visible || !this._boxData || this._boxData.length === 0) return;
+
+            const labels = (this.chart.normalizedData && this.chart.normalizedData.labels) || [];
+            const bandWidth = xScale.getBandWidth();
+            const boxWidth = bandWidth * this.options.boxWidthRatio;
+            const capHalf = boxWidth * this.options.capWidth;
+            const color = this.dataset.color || '#3b82f6';
+            const medianColor = this.options.medianColor || color;
+
+            this._boxes = [];
+
+            ctx.save();
+            ctx.globalAlpha = progress;
+
+            for (let i = 0; i < this._boxData.length; i++) {
+                const d = this._boxData[i];
+                const cx = xScale.getPixel(i);
+                const x = cx - boxWidth / 2;
+
+                const yMin = yScale.getPixel(d.min);
+                const yQ1 = yScale.getPixel(d.q1);
+                const yMedian = yScale.getPixel(d.median);
+                const yQ3 = yScale.getPixel(d.q3);
+                const yMax = yScale.getPixel(d.max);
+
+                // Whisker: min to Q1
+                ctx.beginPath();
+                ctx.strokeStyle = this.options.whiskerColor;
+                ctx.lineWidth = this.options.whiskerWidth;
+                ctx.moveTo(cx, yQ1);
+                ctx.lineTo(cx, yMax); // max is above Q3 (smaller pixel Y)
+                ctx.moveTo(cx, yQ3);
+                ctx.lineTo(cx, yMin); // min is below Q1 (larger pixel Y)
+                ctx.stroke();
+
+                // Caps
+                ctx.beginPath();
+                ctx.moveTo(cx - capHalf, yMax);
+                ctx.lineTo(cx + capHalf, yMax);
+                ctx.moveTo(cx - capHalf, yMin);
+                ctx.lineTo(cx + capHalf, yMin);
+                ctx.stroke();
+
+                // Box (Q1 to Q3)
+                const boxTop = Math.min(yQ1, yQ3);
+                const boxHeight = Math.abs(yQ3 - yQ1);
+                ctx.beginPath();
+                if (ctx.roundRect) {
+                    ctx.roundRect(x, boxTop, boxWidth, boxHeight, 3);
+                } else {
+                    ctx.rect(x, boxTop, boxWidth, boxHeight);
+                }
+                ctx.fillStyle = this._hexToRgba(color, 0.3);
+                ctx.fill();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                // Median line
+                ctx.beginPath();
+                ctx.moveTo(x, yMedian);
+                ctx.lineTo(x + boxWidth, yMedian);
+                ctx.strokeStyle = medianColor;
+                ctx.lineWidth = this.options.medianWidth;
+                ctx.stroke();
+
+                this._boxes.push({
+                    index: i,
+                    x, y: boxTop, w: boxWidth, h: boxHeight,
+                    cx, yMin, yQ1, yMedian, yQ3, yMax,
+                    data: d, color,
+                    label: labels[i] || `Box ${i + 1}`
+                });
+            }
+
+            ctx.restore();
+        }
+
+        drawHover(ctx, plotArea, xScale, yScale, index) {
+            const box = this._boxes.find(b => b.index === index);
+            if (!box) return;
+
+            ctx.save();
+            ctx.shadowColor = 'rgba(0,0,0,0.25)';
+            ctx.shadowBlur = 8;
+            ctx.shadowOffsetY = 2;
+            ctx.beginPath();
+            if (ctx.roundRect) {
+                ctx.roundRect(box.x, box.y, box.w, box.h, 3);
+            } else {
+                ctx.rect(box.x, box.y, box.w, box.h);
+            }
+            ctx.fillStyle = this._hexToRgba(box.color, 0.5);
+            ctx.fill();
+            ctx.strokeStyle = box.color;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        hitTest(mouseX, mouseY) {
+            if (!this._boxes) return null;
+            for (const box of this._boxes) {
+                // Check within box width and whisker range (min to max)
+                const inX = mouseX >= box.x && mouseX <= box.x + box.w;
+                const inY = mouseY >= Math.min(box.yMax, box.yMin) && mouseY <= Math.max(box.yMax, box.yMin);
+                if (inX && inY) {
+                    return {
+                        series: this,
+                        index: box.index,
+                        value: box.data.median,
+                        x: box.cx, y: box.y,
+                        label: box.label,
+                        seriesName: this.dataset.name,
+                        color: box.color,
+                        datasetIndex: this.options.datasetIndex
+                    };
+                }
+            }
+            return null;
+        }
+    }
+
+    if (typeof window !== 'undefined') {
+        window.CZ = window.CZ || {};
+        window.CZ.BoxPlotSeries = BoxPlotSeries;
+    }
+})((typeof window !== 'undefined' ? (window.CZ = window.CZ || {}) : {}));
+
+
+// ============================================================
+// src/render/series/PolarSeries.js
+// ============================================================
+
+(function(CZ) {
+    class PolarSeries {
+        constructor(chart, options = {}) {
+            this.chart = chart;
+            this.options = Object.assign({
+                visible: true,
+                datasetIndex: 0,
+                gapAngle: 2, // degrees between sectors
+                hoverExtend: 8,
+                showGridCircles: true,
+                gridCircleCount: 4,
+                gridColor: 'rgba(0,0,0,0.08)',
+                fillAlpha: 0.7,
+                borderWidth: 2,
+                borderColor: '#ffffff'
+            }, options);
+            this.visible = this.options.visible;
+            this.dataset = null;
+            this._colors = [];
+            this._sectors = [];
+            this._hiddenSlices = new Set();
+            this._hoverIndex = -1;
+        }
+
+        setData(dataset) {
+            this.dataset = dataset;
+            this._colors = [];
+            const numItems = (dataset.values || []).length;
+
+            for (let i = 0; i < numItems; i++) {
+                if (dataset.pointColors && dataset.pointColors[i]) {
+                    this._colors.push(dataset.pointColors[i]);
+                } else if (window.CZ && window.CZ.ColorUtils) {
+                    this._colors.push(window.CZ.ColorUtils.getSeriesColor(i));
+                } else {
+                    const fallback = ['#4e79a7','#f28e2c','#e15759','#76b7b2','#59a14f','#edc949'];
+                    this._colors.push(fallback[i % fallback.length]);
+                }
+            }
+        }
+
+        getBounds() { return null; }
+
+        setHoverIndex(index) { this._hoverIndex = index; }
+
+        getLegendItems() {
+            if (!this.dataset) return [];
+            const labels = (this.chart.normalizedData && this.chart.normalizedData.labels) || [];
+            return this.dataset.values.map((_, i) => ({
+                name: labels[i] || `Item ${i + 1}`,
+                color: this._colors[i] || '#000',
+                visible: !this._hiddenSlices.has(i),
+                datasetIndex: i
+            }));
+        }
+
+        _hexToRgba(hex, alpha) {
+            if (!hex) return `rgba(0,0,0,${alpha})`;
+            if (hex.startsWith('rgb')) {
+                const m = hex.match(/\d+/g);
+                if (m) return `rgba(${m[0]},${m[1]},${m[2]},${alpha})`;
+            }
+            let h = hex.replace(/^#/, '');
+            if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+            const num = parseInt(h, 16);
+            return `rgba(${(num>>16)&255},${(num>>8)&255},${num&255},${alpha})`;
+        }
+
+        draw(ctx, plotArea, xScale, yScale, progress) {
+            if (!this.visible || !this.dataset || !this.dataset.values) return;
+
+            const values = this.dataset.values;
+            const labels = (this.chart.normalizedData && this.chart.normalizedData.labels) || [];
+            const centerX = plotArea.left + plotArea.width / 2;
+            const centerY = plotArea.top + plotArea.height / 2;
+            const maxRadius = Math.max(0, Math.min(plotArea.width, plotArea.height) / 2 - 20);
+
+            // Get visible items
+            const visibleIndexes = [];
+            for (let i = 0; i < values.length; i++) {
+                if (!this._hiddenSlices.has(i)) visibleIndexes.push(i);
+            }
+            if (visibleIndexes.length === 0) return;
+
+            const visibleValues = visibleIndexes.map(i => values[i]);
+            const maxValue = Math.max(...visibleValues);
+            if (maxValue === 0) return;
+
+            const gapRad = (this.options.gapAngle * Math.PI / 180);
+            const totalGap = gapRad * visibleIndexes.length;
+            const sectorAngle = (Math.PI * 2 - totalGap) / visibleIndexes.length;
+            const startAngle = -Math.PI / 2;
+
+            // Highlight state
+            const highlightIdx = this._highlightSlice !== undefined ? this._highlightSlice : -1;
+
+            ctx.save();
+
+            // Draw grid circles
+            if (this.options.showGridCircles) {
+                ctx.strokeStyle = this.options.gridColor;
+                ctx.lineWidth = 1;
+                for (let g = 1; g <= this.options.gridCircleCount; g++) {
+                    const r = Math.max(0, (g / this.options.gridCircleCount) * maxRadius);
+                    if (r <= 0) continue;
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            }
+
+            this._sectors = [];
+            let currentAngle = startAngle;
+
+            for (let vi = 0; vi < visibleIndexes.length; vi++) {
+                const i = visibleIndexes[vi];
+                const value = values[i];
+                const ratio = value / maxValue;
+                const r = Math.max(0, ratio * maxRadius * progress);
+
+                const color = this._colors[i] || '#3b82f6';
+
+                const isHovered = i === this._hoverIndex;
+                const isDimmed = highlightIdx >= 0 && i !== highlightIdx;
+                const extend = isHovered ? this.options.hoverExtend : 0;
+
+                // Sector center offset for hover
+                const midAngle = currentAngle + sectorAngle / 2;
+                const offsetX = isHovered ? Math.cos(midAngle) * extend : 0;
+                const offsetY = isHovered ? Math.sin(midAngle) * extend : 0;
+
+                ctx.save();
+                ctx.globalAlpha = isDimmed ? 0.15 : 1.0;
+
+                ctx.beginPath();
+                ctx.moveTo(centerX + offsetX, centerY + offsetY);
+                if (r > 0) {
+                    ctx.arc(centerX + offsetX, centerY + offsetY, r, currentAngle, currentAngle + sectorAngle);
+                }
+                ctx.closePath();
+
+                ctx.fillStyle = this._hexToRgba(color, this.options.fillAlpha);
+                ctx.fill();
+                ctx.lineWidth = this.options.borderWidth;
+                ctx.strokeStyle = this.options.borderColor;
+                ctx.stroke();
+
+                this._sectors.push({
+                    index: i,
+                    startAngle: currentAngle,
+                    endAngle: currentAngle + sectorAngle,
+                    radius: r,
+                    color, value,
+                    label: labels[i] || `Item ${i + 1}`
+                });
+
+                ctx.restore();
+
+                currentAngle += sectorAngle + gapRad;
+            }
+
+            ctx.restore();
+        }
+
+        drawHover() {
+            // Handled via setHoverIndex + draw
+        }
+
+        animateSliceToggle(index, onComplete) {
+            if (this._hiddenSlices.has(index)) {
+                this._hiddenSlices.delete(index);
+            } else {
+                this._hiddenSlices.add(index);
+            }
+            if (this.chart && typeof this.chart.render === 'function') {
+                this.chart.render();
+            }
+            if (onComplete) onComplete();
+        }
+
+        hitTest(mouseX, mouseY) {
+            if (!this._sectors || this._sectors.length === 0) return null;
+
+            const plotArea = this.chart.plotArea;
+            const centerX = plotArea.left + plotArea.width / 2;
+            const centerY = plotArea.top + plotArea.height / 2;
+
+            const dx = mouseX - centerX;
+            const dy = mouseY - centerY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            let angle = Math.atan2(dy, dx);
+            if (angle < -Math.PI / 2) angle += Math.PI * 2;
+
+            for (const s of this._sectors) {
+                let start = s.startAngle;
+                let end = s.endAngle;
+                // Normalize
+                if (start < -Math.PI / 2) start += Math.PI * 2;
+                if (end < -Math.PI / 2) end += Math.PI * 2;
+
+                const inAngle = (start <= end) ? (angle >= start && angle <= end) :
+                    (angle >= start || angle <= end);
+
+                if (dist <= s.radius && inAngle) {
+                    return {
+                        series: this,
+                        index: s.index,
+                        value: s.value,
+                        x: centerX, y: centerY,
+                        label: s.label,
+                        seriesName: s.label,
+                        color: s.color,
+                        datasetIndex: s.index
+                    };
+                }
+            }
+            return null;
+        }
+    }
+
+    if (typeof window !== 'undefined') {
+        window.CZ = window.CZ || {};
+        window.CZ.PolarSeries = PolarSeries;
+    }
+})((typeof window !== 'undefined' ? (window.CZ = window.CZ || {}) : {}));
+
+
+// ============================================================
 // src/interaction/HitTest.js
 // ============================================================
 
@@ -5793,11 +6937,16 @@ window.CZ.HeatmapSeries = HeatmapSeries;
     gauge: 'GaugeSeries',
     candlestick: 'CandlestickSeries',
     funnel: 'FunnelSeries',
-    heatmap: 'HeatmapSeries'
+    heatmap: 'HeatmapSeries',
+    waterfall: 'WaterfallSeries',
+    bubble: 'BubbleSeries',
+    treemap: 'TreemapSeries',
+    boxplot: 'BoxPlotSeries',
+    polar: 'PolarSeries'
   };
 
   /** Chart types that use radial (non-cartesian) layout */
-  const RADIAL_TYPES = ['pie', 'donut', 'radar', 'gauge', 'funnel'];
+  const RADIAL_TYPES = ['pie', 'donut', 'radar', 'gauge', 'funnel', 'treemap', 'polar'];
 
   /** Global plugin registry */
   const _globalPlugins = [];
@@ -6045,6 +7194,12 @@ window.CZ.HeatmapSeries = HeatmapSeries;
       // Create series renderers
       this._createSeries();
 
+      // Re-measure after legend is populated (legend now has items, taking height)
+      if (this.viewport) {
+        const rect = this.container.getBoundingClientRect();
+        this._onResize(rect.width, rect.height);
+      }
+
       // Initial render
       this._render(true);
     }
@@ -6108,6 +7263,38 @@ window.CZ.HeatmapSeries = HeatmapSeries;
             ohlc: ohlcData,
             color: seriesOptions.bullishColor || '#10b981'
           });
+        } else if (this.type === 'boxplot') {
+          // Merge 5 datasets (min, q1, median, q3, max) into boxData
+          if (index > 0) return;
+
+          const datasets = this.normalizedData.datasets;
+          const len = datasets[0] ? datasets[0].values.length : 0;
+          const boxData = [];
+          for (let j = 0; j < len; j++) {
+            boxData.push({
+              min:    datasets[0] ? datasets[0].values[j] : 0,
+              q1:     datasets[1] ? datasets[1].values[j] : 0,
+              median: datasets[2] ? datasets[2].values[j] : 0,
+              q3:     datasets[3] ? datasets[3].values[j] : 0,
+              max:    datasets[4] ? datasets[4].values[j] : 0
+            });
+          }
+          instance.setData({
+            name: 'Box Plot',
+            boxData: boxData,
+            color: seriesOptions.color || dataset.color || '#3b82f6'
+          });
+        } else if (this.type === 'bubble') {
+          // Bubble: use first y field for Y values, pass sizes from rawData
+          const labels = this.normalizedData.labels;
+          const bubbleDataset = {
+            ...dataset,
+            points: dataset.values.map((yVal, i) => ({
+              x: parseFloat(labels[i]) || i,
+              y: yVal
+            }))
+          };
+          instance.setData(bubbleDataset);
         } else {
           instance.setData(dataset);
         }
@@ -6165,6 +7352,21 @@ window.CZ.HeatmapSeries = HeatmapSeries;
         case 'heatmap':
           Object.assign(opts, this.options.heatmap || {});
           break;
+        case 'waterfall':
+          Object.assign(opts, this.options.waterfall || {});
+          break;
+        case 'bubble':
+          Object.assign(opts, this.options.bubble || {});
+          break;
+        case 'treemap':
+          Object.assign(opts, this.options.treemap || {});
+          break;
+        case 'boxplot':
+          Object.assign(opts, this.options.boxplot || {});
+          break;
+        case 'polar':
+          Object.assign(opts, this.options.polar || {});
+          break;
         default:
           Object.assign(opts, this.options.series);
       }
@@ -6194,10 +7396,21 @@ window.CZ.HeatmapSeries = HeatmapSeries;
         // Measure Y axis label width
         const yAxisWidth = this._measureYAxisWidth(ctx);
         left += yAxisWidth + 8;
+        if (this.options.yAxis.title) {
+          left += 18; // space for y-axis title
+        }
       }
 
       if (!this.isRadial && this.options.xAxis.show) {
         bottom -= 28; // space for x-axis labels
+        if (this.options.xAxis.title) {
+          bottom -= 20; // space for x-axis title
+        }
+      }
+
+      // For radial charts, add extra bottom padding to prevent canvas clipping
+      if (this.isRadial) {
+        bottom -= 10;
       }
 
       this.plotArea = {
@@ -6283,7 +7496,7 @@ window.CZ.HeatmapSeries = HeatmapSeries;
       }
 
       // X Scale
-      if (this.type === 'scatter') {
+      if (this.type === 'scatter' || this.type === 'bubble') {
         // Scatter: both axes are linear, get X bounds from scatter data
         let minX = Infinity, maxX = -Infinity;
         this.series.forEach(s => {
@@ -6390,6 +7603,19 @@ window.CZ.HeatmapSeries = HeatmapSeries;
             });
             if (!isFinite(maxX) || maxX <= 0) maxX = 100;
             this.scales.x.configure(minX, maxX, this.plotArea.left, this.plotArea.right);
+          } else if (this.type === 'scatter' || this.type === 'bubble') {
+            // Scatter/Bubble: X is LinearScale, reconfigure with value bounds
+            let minX = Infinity, maxX = -Infinity;
+            this.series.forEach(s => {
+              if (!s.visible) return;
+              const bounds = s.getBounds();
+              if (bounds) {
+                if (bounds.minX < minX) minX = bounds.minX;
+                if (bounds.maxX > maxX) maxX = bounds.maxX;
+              }
+            });
+            if (!isFinite(minX)) { minX = 0; maxX = 100; }
+            this.scales.x.configure(minX, maxX, this.plotArea.left, this.plotArea.right);
           } else if (this.normalizedData.xType === 'category' || this.normalizedData.xType === 'time') {
             this.scales.x.configure(
               this.normalizedData.labels,
@@ -6461,7 +7687,7 @@ window.CZ.HeatmapSeries = HeatmapSeries;
 
       // Draw series
       const highlightIdx = this._highlightIndex !== undefined ? this._highlightIndex : -1;
-      const isPieDonut = (this.type === 'pie' || this.type === 'donut' || this.type === 'funnel' || this.type === 'heatmap');
+      const isPieDonut = (this.type === 'pie' || this.type === 'donut' || this.type === 'funnel' || this.type === 'heatmap' || this.type === 'treemap' || this.type === 'polar');
 
       const drawSeries = (progress) => {
         ctx.save();
@@ -6547,7 +7773,7 @@ window.CZ.HeatmapSeries = HeatmapSeries;
       const overlayCtx = this.renderer.getOverlayContext();
 
       const newHoverIndex = hitNearest ? hitNearest.index : -1;
-      const isPieDonut = (this.type === 'pie' || this.type === 'donut' || this.type === 'funnel');
+      const isPieDonut = (this.type === 'pie' || this.type === 'donut' || this.type === 'funnel' || this.type === 'treemap' || this.type === 'polar');
 
       if (hitNearest) {
         // Crosshair (cartesian only)
@@ -6761,8 +7987,8 @@ window.CZ.HeatmapSeries = HeatmapSeries;
      * @param {number} index - Dataset index
      */
     toggleSeries(index) {
-      // For pie/donut/funnel, toggle individual data points with animation
-      if ((this.type === 'pie' || this.type === 'donut' || this.type === 'funnel') && this.series[0]) {
+      // For pie/donut/funnel/treemap/polar, toggle individual data points with animation
+      if ((this.type === 'pie' || this.type === 'donut' || this.type === 'funnel' || this.type === 'treemap' || this.type === 'polar') && this.series[0]) {
         const pie = this.series[0];
         if (!pie._hiddenSlices) pie._hiddenSlices = new Set();
         const wasHidden = pie._hiddenSlices.has(index);

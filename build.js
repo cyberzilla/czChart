@@ -46,6 +46,11 @@ const FILES = [
   'src/render/series/CandlestickSeries.js',
   'src/render/series/FunnelSeries.js',
   'src/render/series/HeatmapSeries.js',
+  'src/render/series/WaterfallSeries.js',
+  'src/render/series/BubbleSeries.js',
+  'src/render/series/TreemapSeries.js',
+  'src/render/series/BoxPlotSeries.js',
+  'src/render/series/PolarSeries.js',
 
   // 7. Interaction
   'src/interaction/HitTest.js',

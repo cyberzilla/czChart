@@ -17,11 +17,16 @@
     gauge: 'GaugeSeries',
     candlestick: 'CandlestickSeries',
     funnel: 'FunnelSeries',
-    heatmap: 'HeatmapSeries'
+    heatmap: 'HeatmapSeries',
+    waterfall: 'WaterfallSeries',
+    bubble: 'BubbleSeries',
+    treemap: 'TreemapSeries',
+    boxplot: 'BoxPlotSeries',
+    polar: 'PolarSeries'
   };
 
   /** Chart types that use radial (non-cartesian) layout */
-  const RADIAL_TYPES = ['pie', 'donut', 'radar', 'gauge', 'funnel'];
+  const RADIAL_TYPES = ['pie', 'donut', 'radar', 'gauge', 'funnel', 'treemap', 'polar'];
 
   /** Global plugin registry */
   const _globalPlugins = [];
@@ -269,6 +274,12 @@
       // Create series renderers
       this._createSeries();
 
+      // Re-measure after legend is populated (legend now has items, taking height)
+      if (this.viewport) {
+        const rect = this.container.getBoundingClientRect();
+        this._onResize(rect.width, rect.height);
+      }
+
       // Initial render
       this._render(true);
     }
@@ -332,6 +343,38 @@
             ohlc: ohlcData,
             color: seriesOptions.bullishColor || '#10b981'
           });
+        } else if (this.type === 'boxplot') {
+          // Merge 5 datasets (min, q1, median, q3, max) into boxData
+          if (index > 0) return;
+
+          const datasets = this.normalizedData.datasets;
+          const len = datasets[0] ? datasets[0].values.length : 0;
+          const boxData = [];
+          for (let j = 0; j < len; j++) {
+            boxData.push({
+              min:    datasets[0] ? datasets[0].values[j] : 0,
+              q1:     datasets[1] ? datasets[1].values[j] : 0,
+              median: datasets[2] ? datasets[2].values[j] : 0,
+              q3:     datasets[3] ? datasets[3].values[j] : 0,
+              max:    datasets[4] ? datasets[4].values[j] : 0
+            });
+          }
+          instance.setData({
+            name: 'Box Plot',
+            boxData: boxData,
+            color: seriesOptions.color || dataset.color || '#3b82f6'
+          });
+        } else if (this.type === 'bubble') {
+          // Bubble: use first y field for Y values, pass sizes from rawData
+          const labels = this.normalizedData.labels;
+          const bubbleDataset = {
+            ...dataset,
+            points: dataset.values.map((yVal, i) => ({
+              x: parseFloat(labels[i]) || i,
+              y: yVal
+            }))
+          };
+          instance.setData(bubbleDataset);
         } else {
           instance.setData(dataset);
         }
@@ -389,6 +432,21 @@
         case 'heatmap':
           Object.assign(opts, this.options.heatmap || {});
           break;
+        case 'waterfall':
+          Object.assign(opts, this.options.waterfall || {});
+          break;
+        case 'bubble':
+          Object.assign(opts, this.options.bubble || {});
+          break;
+        case 'treemap':
+          Object.assign(opts, this.options.treemap || {});
+          break;
+        case 'boxplot':
+          Object.assign(opts, this.options.boxplot || {});
+          break;
+        case 'polar':
+          Object.assign(opts, this.options.polar || {});
+          break;
         default:
           Object.assign(opts, this.options.series);
       }
@@ -418,10 +476,21 @@
         // Measure Y axis label width
         const yAxisWidth = this._measureYAxisWidth(ctx);
         left += yAxisWidth + 8;
+        if (this.options.yAxis.title) {
+          left += 18; // space for y-axis title
+        }
       }
 
       if (!this.isRadial && this.options.xAxis.show) {
         bottom -= 28; // space for x-axis labels
+        if (this.options.xAxis.title) {
+          bottom -= 20; // space for x-axis title
+        }
+      }
+
+      // For radial charts, add extra bottom padding to prevent canvas clipping
+      if (this.isRadial) {
+        bottom -= 10;
       }
 
       this.plotArea = {
@@ -507,7 +576,7 @@
       }
 
       // X Scale
-      if (this.type === 'scatter') {
+      if (this.type === 'scatter' || this.type === 'bubble') {
         // Scatter: both axes are linear, get X bounds from scatter data
         let minX = Infinity, maxX = -Infinity;
         this.series.forEach(s => {
@@ -614,6 +683,19 @@
             });
             if (!isFinite(maxX) || maxX <= 0) maxX = 100;
             this.scales.x.configure(minX, maxX, this.plotArea.left, this.plotArea.right);
+          } else if (this.type === 'scatter' || this.type === 'bubble') {
+            // Scatter/Bubble: X is LinearScale, reconfigure with value bounds
+            let minX = Infinity, maxX = -Infinity;
+            this.series.forEach(s => {
+              if (!s.visible) return;
+              const bounds = s.getBounds();
+              if (bounds) {
+                if (bounds.minX < minX) minX = bounds.minX;
+                if (bounds.maxX > maxX) maxX = bounds.maxX;
+              }
+            });
+            if (!isFinite(minX)) { minX = 0; maxX = 100; }
+            this.scales.x.configure(minX, maxX, this.plotArea.left, this.plotArea.right);
           } else if (this.normalizedData.xType === 'category' || this.normalizedData.xType === 'time') {
             this.scales.x.configure(
               this.normalizedData.labels,
@@ -685,7 +767,7 @@
 
       // Draw series
       const highlightIdx = this._highlightIndex !== undefined ? this._highlightIndex : -1;
-      const isPieDonut = (this.type === 'pie' || this.type === 'donut' || this.type === 'funnel' || this.type === 'heatmap');
+      const isPieDonut = (this.type === 'pie' || this.type === 'donut' || this.type === 'funnel' || this.type === 'heatmap' || this.type === 'treemap' || this.type === 'polar');
 
       const drawSeries = (progress) => {
         ctx.save();
@@ -771,7 +853,7 @@
       const overlayCtx = this.renderer.getOverlayContext();
 
       const newHoverIndex = hitNearest ? hitNearest.index : -1;
-      const isPieDonut = (this.type === 'pie' || this.type === 'donut' || this.type === 'funnel');
+      const isPieDonut = (this.type === 'pie' || this.type === 'donut' || this.type === 'funnel' || this.type === 'treemap' || this.type === 'polar');
 
       if (hitNearest) {
         // Crosshair (cartesian only)
@@ -985,8 +1067,8 @@
      * @param {number} index - Dataset index
      */
     toggleSeries(index) {
-      // For pie/donut/funnel, toggle individual data points with animation
-      if ((this.type === 'pie' || this.type === 'donut' || this.type === 'funnel') && this.series[0]) {
+      // For pie/donut/funnel/treemap/polar, toggle individual data points with animation
+      if ((this.type === 'pie' || this.type === 'donut' || this.type === 'funnel' || this.type === 'treemap' || this.type === 'polar') && this.series[0]) {
         const pie = this.series[0];
         if (!pie._hiddenSlices) pie._hiddenSlices = new Set();
         const wasHidden = pie._hiddenSlices.has(index);
