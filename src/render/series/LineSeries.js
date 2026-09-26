@@ -22,6 +22,7 @@ class LineSeries {
         this.dataset = null;
         this.visible = this.options.visible;
         this._selectedPoints = new Set(); // indices of pinned/clicked points
+        this._bounceAnims = new Map();    // index → { startTime, selecting }
     }
 
     /**
@@ -204,10 +205,11 @@ class LineSeries {
                 ctx.stroke();
             });
 
-            // Selected (toggled) points: hollow ring with center dot
+            // Selected (toggled) points: hollow ring with center dot + bounce
             points.forEach(p => {
                 if (!this._selectedPoints.has(p.index)) return;
-                const r = this.options.pointHoverRadius;
+                const bounceScale = this._getBounceScale(p.index);
+                const r = this.options.pointHoverRadius * bounceScale;
 
                 // Mask + hollow circle
                 ctx.beginPath();
@@ -224,7 +226,7 @@ class LineSeries {
 
                 // Center dot
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+                ctx.arc(p.x, p.y, 2.5 * bounceScale, 0, Math.PI * 2);
                 ctx.fillStyle = color;
                 ctx.fill();
             });
@@ -241,15 +243,60 @@ class LineSeries {
     }
 
     /**
-     * Toggle a data point selection (click to pin/unpin)
+     * Toggle a data point selection with bounce animation
      * @param {number} index - Data point index
      */
     togglePoint(index) {
-        if (this._selectedPoints.has(index)) {
-            this._selectedPoints.delete(index);
-        } else {
+        const selecting = !this._selectedPoints.has(index);
+        if (selecting) {
             this._selectedPoints.add(index);
+        } else {
+            this._selectedPoints.delete(index);
         }
+
+        // Start bounce animation
+        this._bounceAnims.set(index, { startTime: performance.now(), selecting });
+        this._runBounceLoop();
+    }
+
+    /** @private - Run bounce animation loop */
+    _runBounceLoop() {
+        if (this._bounceRaf) return; // already running
+        const tick = () => {
+            const now = performance.now();
+            let anyActive = false;
+            for (const [idx, anim] of this._bounceAnims) {
+                const elapsed = now - anim.startTime;
+                if (elapsed >= 400) {
+                    this._bounceAnims.delete(idx);
+                } else {
+                    anyActive = true;
+                }
+            }
+            this.chart._render(false);
+            if (anyActive) {
+                this._bounceRaf = requestAnimationFrame(tick);
+            } else {
+                this._bounceRaf = null;
+            }
+        };
+        this._bounceRaf = requestAnimationFrame(tick);
+    }
+
+    /**
+     * Get bounce scale multiplier for a point
+     * @param {number} index
+     * @returns {number} scale (1.0 = normal)
+     */
+    _getBounceScale(index) {
+        const anim = this._bounceAnims.get(index);
+        if (!anim) return 1.0;
+        const t = Math.min(1, (performance.now() - anim.startTime) / 400);
+        // easeOutElastic
+        const p = 0.3;
+        const bounce = Math.pow(2, -10 * t) * Math.sin((t - p / 4) * (2 * Math.PI) / p) + 1;
+        // Scale: overshoot to ~1.8x then settle to 1.0
+        return 1.0 + (bounce - 1) * 0.8;
     }
 
     /**

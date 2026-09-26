@@ -27,6 +27,8 @@ window.CZ.Styles = {
 .cz-legend-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; display: inline-block; }
 .cz-legend-label { color: #374151; text-decoration: none; }
 .cz-crosshair-label { position: absolute; background: #1f2937; color: #fff; padding: 2px 6px; font-size: 10px; border-radius: 3px; pointer-events: none; }
+@keyframes cz-bounce { 0% { transform: scale(1); } 30% { transform: scale(1.6); } 50% { transform: scale(0.85); } 70% { transform: scale(1.15); } 85% { transform: scale(0.97); } 100% { transform: scale(1); } }
+.cz-legend-swatch.cz-bounce { animation: cz-bounce 0.4s ease-out; }
 `;
 
         const style = document.createElement('style');

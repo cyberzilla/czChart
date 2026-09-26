@@ -77,6 +77,18 @@
             const index = parseInt(itemEl.getAttribute('data-index'), 10);
             if (isNaN(index)) return;
 
+            // Bounce animation on swatch
+            const swatch = itemEl.querySelector('.cz-legend-swatch');
+            if (swatch) {
+                swatch.classList.remove('cz-bounce');
+                // Force reflow to restart animation
+                void swatch.offsetWidth;
+                swatch.classList.add('cz-bounce');
+                swatch.addEventListener('animationend', () => {
+                    swatch.classList.remove('cz-bounce');
+                }, { once: true });
+            }
+
             // Reset highlight on click to prevent flash/flicker during toggle animation.
             // (mouseover fires alongside click, setting highlight which dims other slices)
             if (this.chart.highlightSeries) {

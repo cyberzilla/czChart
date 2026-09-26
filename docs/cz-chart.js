@@ -2,7 +2,7 @@
  * czChart v1.0.0 — Lightweight, Data-Driven Chart Library
  * (c) 2026 CyberZilla
  * Released under the MIT License
- * Built: 2026-09-25T16:40:25.850Z
+ * Built: 2026-09-26T03:37:45.421Z
  */
 
 (function(global) {
@@ -470,6 +470,8 @@ window.CZ.Styles = {
 .cz-legend-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; display: inline-block; }
 .cz-legend-label { color: #374151; text-decoration: none; }
 .cz-crosshair-label { position: absolute; background: #1f2937; color: #fff; padding: 2px 6px; font-size: 10px; border-radius: 3px; pointer-events: none; }
+@keyframes cz-bounce { 0% { transform: scale(1); } 30% { transform: scale(1.6); } 50% { transform: scale(0.85); } 70% { transform: scale(1.15); } 85% { transform: scale(0.97); } 100% { transform: scale(1); } }
+.cz-legend-swatch.cz-bounce { animation: cz-bounce 0.4s ease-out; }
 `;
 
         const style = document.createElement('style');
@@ -1883,6 +1885,7 @@ class LineSeries {
         this.dataset = null;
         this.visible = this.options.visible;
         this._selectedPoints = new Set(); // indices of pinned/clicked points
+        this._bounceAnims = new Map();    // index → { startTime, selecting }
     }
 
     /**
@@ -2065,10 +2068,11 @@ class LineSeries {
                 ctx.stroke();
             });
 
-            // Selected (toggled) points: hollow ring with center dot
+            // Selected (toggled) points: hollow ring with center dot + bounce
             points.forEach(p => {
                 if (!this._selectedPoints.has(p.index)) return;
-                const r = this.options.pointHoverRadius;
+                const bounceScale = this._getBounceScale(p.index);
+                const r = this.options.pointHoverRadius * bounceScale;
 
                 // Mask + hollow circle
                 ctx.beginPath();
@@ -2085,7 +2089,7 @@ class LineSeries {
 
                 // Center dot
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+                ctx.arc(p.x, p.y, 2.5 * bounceScale, 0, Math.PI * 2);
                 ctx.fillStyle = color;
                 ctx.fill();
             });
@@ -2102,15 +2106,60 @@ class LineSeries {
     }
 
     /**
-     * Toggle a data point selection (click to pin/unpin)
+     * Toggle a data point selection with bounce animation
      * @param {number} index - Data point index
      */
     togglePoint(index) {
-        if (this._selectedPoints.has(index)) {
-            this._selectedPoints.delete(index);
-        } else {
+        const selecting = !this._selectedPoints.has(index);
+        if (selecting) {
             this._selectedPoints.add(index);
+        } else {
+            this._selectedPoints.delete(index);
         }
+
+        // Start bounce animation
+        this._bounceAnims.set(index, { startTime: performance.now(), selecting });
+        this._runBounceLoop();
+    }
+
+    /** @private - Run bounce animation loop */
+    _runBounceLoop() {
+        if (this._bounceRaf) return; // already running
+        const tick = () => {
+            const now = performance.now();
+            let anyActive = false;
+            for (const [idx, anim] of this._bounceAnims) {
+                const elapsed = now - anim.startTime;
+                if (elapsed >= 400) {
+                    this._bounceAnims.delete(idx);
+                } else {
+                    anyActive = true;
+                }
+            }
+            this.chart._render(false);
+            if (anyActive) {
+                this._bounceRaf = requestAnimationFrame(tick);
+            } else {
+                this._bounceRaf = null;
+            }
+        };
+        this._bounceRaf = requestAnimationFrame(tick);
+    }
+
+    /**
+     * Get bounce scale multiplier for a point
+     * @param {number} index
+     * @returns {number} scale (1.0 = normal)
+     */
+    _getBounceScale(index) {
+        const anim = this._bounceAnims.get(index);
+        if (!anim) return 1.0;
+        const t = Math.min(1, (performance.now() - anim.startTime) / 400);
+        // easeOutElastic
+        const p = 0.3;
+        const bounce = Math.pow(2, -10 * t) * Math.sin((t - p / 4) * (2 * Math.PI) / p) + 1;
+        // Scale: overshoot to ~1.8x then settle to 1.0
+        return 1.0 + (bounce - 1) * 0.8;
     }
 
     /**
@@ -2226,6 +2275,8 @@ class BarSeries {
         this.visible = this.options.visible;
         this.datasetIndex = 0;
         this.totalDatasets = 1;
+        this._selectedPoints = new Set();
+        this._bounceAnims = new Map(); // index → { startTime, selecting }
     }
 
     /**
@@ -2249,7 +2300,7 @@ class BarSeries {
             name: this.dataset.name,
             color: this.dataset.color,
             visible: this.visible,
-            datasetIndex: this.datasetIndex,
+            datasetIndex: this.options.datasetIndex,
             series: this
         }];
     }
@@ -2334,24 +2385,70 @@ class BarSeries {
             const currentY = zeroY + (targetY - zeroY) * progress;
             const barHeight = zeroY - currentY; // Note: Canvas Y is flipped
             
-            const drawX = Math.round(xPos);
-            const drawY = Math.round(currentY);
-            const drawW = Math.max(1, Math.round(barWidth));
-            const drawH = Math.round(barHeight);
+            let drawX = Math.round(xPos);
+            let drawY = Math.round(currentY);
+            let drawW = Math.max(1, Math.round(barWidth));
+            let drawH = Math.round(barHeight);
+
+            // Apply bounce animation to selected bars
+            const bounceScale = this._getBounceScale(i);
+            const isSelected = this._selectedPoints.has(i);
+            if (bounceScale !== 1.0) {
+                // Stretch height from base (zeroY) with bounce
+                const extraH = drawH * (bounceScale - 1);
+                drawH = Math.round(drawH * bounceScale);
+                drawY = Math.round(value >= 0 ? currentY - extraH : currentY);
+            }
 
             this._renderedBars.push({
                 index: i,
                 x: drawX,
-                y: value >= 0 ? drawY : zeroY,
+                y: value >= 0 ? (bounceScale !== 1.0 ? drawY : drawY) : zeroY,
                 width: drawW,
                 height: Math.abs(drawH),
                 value: value
             });
 
+            ctx.fillStyle = this.dataset.color || '#000';
             if (this.options.borderRadius > 0) {
                 this._roundedRect(ctx, drawX, value >= 0 ? drawY : zeroY, drawW, value >= 0 ? drawH : -drawH, this.options.borderRadius);
             } else {
                 ctx.fillRect(drawX, value >= 0 ? drawY : zeroY, drawW, value >= 0 ? drawH : -drawH);
+            }
+
+            // Draw selection outline for selected bars
+            if (isSelected) {
+                ctx.save();
+                ctx.strokeStyle = this.dataset.color || '#000';
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = 0.6;
+                const selY = value >= 0 ? drawY : zeroY;
+                const selH = value >= 0 ? drawH : -drawH;
+                if (this.options.borderRadius > 0) {
+                    // Re-use rounded rect path for stroke
+                    ctx.beginPath();
+                    const r = Math.min(this.options.borderRadius, Math.abs(selH) / 2, drawW / 2);
+                    if (selH >= 0) {
+                        ctx.moveTo(drawX, selY + selH);
+                        ctx.lineTo(drawX + drawW, selY + selH);
+                        ctx.lineTo(drawX + drawW, selY + r);
+                        ctx.quadraticCurveTo(drawX + drawW, selY, drawX + drawW - r, selY);
+                        ctx.lineTo(drawX + r, selY);
+                        ctx.quadraticCurveTo(drawX, selY, drawX, selY + r);
+                    } else {
+                        ctx.moveTo(drawX, selY);
+                        ctx.lineTo(drawX + drawW, selY);
+                        ctx.lineTo(drawX + drawW, selY + selH - r);
+                        ctx.quadraticCurveTo(drawX + drawW, selY + selH, drawX + drawW - r, selY + selH);
+                        ctx.lineTo(drawX + r, selY + selH);
+                        ctx.quadraticCurveTo(drawX, selY + selH, drawX, selY + selH - r);
+                    }
+                    ctx.closePath();
+                    ctx.stroke();
+                } else {
+                    ctx.strokeRect(drawX, selY, drawW, selH);
+                }
+                ctx.restore();
             }
         });
 
@@ -2374,6 +2471,54 @@ class BarSeries {
             ctx.fillRect(bar.x, bar.value >= 0 ? bar.y : bar.y - bar.height, bar.width, bar.height);
         }
         ctx.restore();
+    }
+
+    /**
+     * Toggle a data point selection with bounce animation
+     */
+    togglePoint(index) {
+        const selecting = !this._selectedPoints.has(index);
+        if (selecting) {
+            this._selectedPoints.add(index);
+        } else {
+            this._selectedPoints.delete(index);
+        }
+
+        this._bounceAnims.set(index, { startTime: performance.now(), selecting });
+        this._runBounceLoop();
+    }
+
+    /** @private */
+    _runBounceLoop() {
+        if (this._bounceRaf) return;
+        const tick = () => {
+            const now = performance.now();
+            let anyActive = false;
+            for (const [idx, anim] of this._bounceAnims) {
+                if (now - anim.startTime >= 400) {
+                    this._bounceAnims.delete(idx);
+                } else {
+                    anyActive = true;
+                }
+            }
+            this.chart._render(false);
+            if (anyActive) {
+                this._bounceRaf = requestAnimationFrame(tick);
+            } else {
+                this._bounceRaf = null;
+            }
+        };
+        this._bounceRaf = requestAnimationFrame(tick);
+    }
+
+    /** @private */
+    _getBounceScale(index) {
+        const anim = this._bounceAnims.get(index);
+        if (!anim) return 1.0;
+        const t = Math.min(1, (performance.now() - anim.startTime) / 400);
+        const p = 0.3;
+        const bounce = Math.pow(2, -10 * t) * Math.sin((t - p / 4) * (2 * Math.PI) / p) + 1;
+        return 1.0 + (bounce - 1) * 0.15; // subtle 15% bounce for bars
     }
 
     hitTest(mouseX, mouseY, plotArea, xScale, yScale) {
@@ -2894,6 +3039,7 @@ class ScatterSeries {
         this.dataset = null;
         this.visible = this.options.visible;
         this._selectedPoints = new Set();
+        this._bounceAnims = new Map(); // index → { startTime, selecting }
     }
 
     setData(dataset) {
@@ -2992,12 +3138,13 @@ class ScatterSeries {
 
         ctx.restore();
 
-        // Second pass: selected points — hollow ring + center dot
+        // Second pass: selected points — hollow ring + center dot with bounce
         if (this._selectedPoints.size > 0) {
             ctx.save();
             for (const pt of this._renderedPoints) {
                 if (!this._selectedPoints.has(pt.index)) continue;
-                const r = Math.max(3, pt.r * 1.2);
+                const bounceScale = this._getBounceScale(pt.index);
+                const r = Math.max(3, pt.r * 1.2) * bounceScale;
 
                 // Mask + hollow circle
                 ctx.beginPath();
@@ -3014,7 +3161,7 @@ class ScatterSeries {
 
                 // Center dot
                 ctx.beginPath();
-                ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
+                ctx.arc(pt.x, pt.y, 2.5 * bounceScale, 0, Math.PI * 2);
                 ctx.fillStyle = color;
                 ctx.fill();
             }
@@ -3023,14 +3170,51 @@ class ScatterSeries {
     }
 
     /**
-     * Toggle a data point selection
+     * Toggle a data point selection with bounce animation
      */
     togglePoint(index) {
-        if (this._selectedPoints.has(index)) {
-            this._selectedPoints.delete(index);
-        } else {
+        const selecting = !this._selectedPoints.has(index);
+        if (selecting) {
             this._selectedPoints.add(index);
+        } else {
+            this._selectedPoints.delete(index);
         }
+
+        this._bounceAnims.set(index, { startTime: performance.now(), selecting });
+        this._runBounceLoop();
+    }
+
+    /** @private */
+    _runBounceLoop() {
+        if (this._bounceRaf) return;
+        const tick = () => {
+            const now = performance.now();
+            let anyActive = false;
+            for (const [idx, anim] of this._bounceAnims) {
+                if (now - anim.startTime >= 400) {
+                    this._bounceAnims.delete(idx);
+                } else {
+                    anyActive = true;
+                }
+            }
+            this.chart._render(false);
+            if (anyActive) {
+                this._bounceRaf = requestAnimationFrame(tick);
+            } else {
+                this._bounceRaf = null;
+            }
+        };
+        this._bounceRaf = requestAnimationFrame(tick);
+    }
+
+    /** @private */
+    _getBounceScale(index) {
+        const anim = this._bounceAnims.get(index);
+        if (!anim) return 1.0;
+        const t = Math.min(1, (performance.now() - anim.startTime) / 400);
+        const p = 0.3;
+        const bounce = Math.pow(2, -10 * t) * Math.sin((t - p / 4) * (2 * Math.PI) / p) + 1;
+        return 1.0 + (bounce - 1) * 0.8;
     }
 
     /**
@@ -3130,6 +3314,7 @@ class RadarSeries {
         this.dataset = null;
         this.visible = this.options.visible;
         this._selectedPoints = new Set();
+        this._bounceAnims = new Map(); // index → { startTime, selecting }
     }
 
     setData(dataset) {
@@ -3245,13 +3430,14 @@ class RadarSeries {
 
         ctx.restore();
 
-        // Selected points — hollow ring + center dot
+        // Selected points — hollow ring + center dot with bounce
         if (this._selectedPoints.size > 0) {
             ctx.save();
             const bgColor = this._getBackgroundColor();
             for (const pt of this._renderedPoints) {
                 if (!this._selectedPoints.has(pt.index)) continue;
-                const r = 8;
+                const bounceScale = this._getBounceScale(pt.index);
+                const r = 8 * bounceScale;
 
                 // Mask + hollow circle
                 ctx.beginPath();
@@ -3268,7 +3454,7 @@ class RadarSeries {
 
                 // Center dot
                 ctx.beginPath();
-                ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
+                ctx.arc(pt.x, pt.y, 2.5 * bounceScale, 0, Math.PI * 2);
                 ctx.fillStyle = color;
                 ctx.fill();
             }
@@ -3284,14 +3470,51 @@ class RadarSeries {
     }
 
     /**
-     * Toggle a data point selection
+     * Toggle a data point selection with bounce animation
      */
     togglePoint(index) {
-        if (this._selectedPoints.has(index)) {
-            this._selectedPoints.delete(index);
-        } else {
+        const selecting = !this._selectedPoints.has(index);
+        if (selecting) {
             this._selectedPoints.add(index);
+        } else {
+            this._selectedPoints.delete(index);
         }
+
+        this._bounceAnims.set(index, { startTime: performance.now(), selecting });
+        this._runBounceLoop();
+    }
+
+    /** @private */
+    _runBounceLoop() {
+        if (this._bounceRaf) return;
+        const tick = () => {
+            const now = performance.now();
+            let anyActive = false;
+            for (const [idx, anim] of this._bounceAnims) {
+                if (now - anim.startTime >= 400) {
+                    this._bounceAnims.delete(idx);
+                } else {
+                    anyActive = true;
+                }
+            }
+            this.chart._render(false);
+            if (anyActive) {
+                this._bounceRaf = requestAnimationFrame(tick);
+            } else {
+                this._bounceRaf = null;
+            }
+        };
+        this._bounceRaf = requestAnimationFrame(tick);
+    }
+
+    /** @private */
+    _getBounceScale(index) {
+        const anim = this._bounceAnims.get(index);
+        if (!anim) return 1.0;
+        const t = Math.min(1, (performance.now() - anim.startTime) / 400);
+        const p = 0.3;
+        const bounce = Math.pow(2, -10 * t) * Math.sin((t - p / 4) * (2 * Math.PI) / p) + 1;
+        return 1.0 + (bounce - 1) * 0.8;
     }
 
     drawHover(ctx, plotArea, xScale, yScale, activeIndex) {
@@ -3689,6 +3912,18 @@ window.CZ.RadarSeries = RadarSeries;
             if (!itemEl) return;
             const index = parseInt(itemEl.getAttribute('data-index'), 10);
             if (isNaN(index)) return;
+
+            // Bounce animation on swatch
+            const swatch = itemEl.querySelector('.cz-legend-swatch');
+            if (swatch) {
+                swatch.classList.remove('cz-bounce');
+                // Force reflow to restart animation
+                void swatch.offsetWidth;
+                swatch.classList.add('cz-bounce');
+                swatch.addEventListener('animationend', () => {
+                    swatch.classList.remove('cz-bounce');
+                }, { once: true });
+            }
 
             // Reset highlight on click to prevent flash/flicker during toggle animation.
             // (mouseover fires alongside click, setting highlight which dims other slices)
@@ -4961,8 +5196,8 @@ window.CZ.RadarSeries = RadarSeries;
     _handleClick(e) {
       if (this._destroyed) return;
       
-      // Toggle point selection on line/area/scatter/radar charts
-      if (this.type === 'line' || this.type === 'area' || this.type === 'scatter' || this.type === 'radar') {
+      // Toggle point selection on line/area/scatter/radar/bar charts
+      if (this.type === 'line' || this.type === 'area' || this.type === 'scatter' || this.type === 'radar' || this.type === 'bar') {
         const rect = this.renderer.getMainCanvas().getBoundingClientRect();
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
@@ -4974,10 +5209,23 @@ window.CZ.RadarSeries = RadarSeries;
         let bestSeries = null;
         let bestDist = Infinity;
         for (const s of this.series) {
-          if (!s.togglePoint || !s.visible || !s._renderedPoints) continue;
-          for (const pt of s._renderedPoints) {
+          if (!s.togglePoint || !s.visible) continue;
+          // Check rendered points (line/scatter/radar) or rendered bars (bar)
+          const points = s._renderedPoints || [];
+          const bars = s._renderedBars || [];
+          for (const pt of points) {
             if (pt.index !== hit.index) continue;
             const d = Math.sqrt((mx - pt.x) ** 2 + (my - pt.y) ** 2);
+            if (d < bestDist) {
+              bestDist = d;
+              bestSeries = s;
+            }
+          }
+          for (const bar of bars) {
+            if (bar.index !== hit.index) continue;
+            const cx = bar.x + bar.width / 2;
+            const cy = bar.y;
+            const d = Math.sqrt((mx - cx) ** 2 + (my - cy) ** 2);
             if (d < bestDist) {
               bestDist = d;
               bestSeries = s;
@@ -4986,7 +5234,7 @@ window.CZ.RadarSeries = RadarSeries;
         }
         if (bestSeries && bestDist <= 30) {
           bestSeries.togglePoint(hit.index);
-          this._render(false);
+          // Bounce animation loop handles re-rendering
         }
       }
 
@@ -5070,10 +5318,38 @@ window.CZ.RadarSeries = RadarSeries;
       // For cartesian charts, toggle series visibility
       if (this.series[index]) {
         this.series[index].visible = !this.series[index].visible;
+
+        // For bar charts, recalculate grouped positions so visible bars
+        // redistribute evenly (no empty gaps)
+        if (this.type === 'bar') {
+          this._recalcBarPositions();
+        }
+
         this._updateLegend();
         this._render(true);
         this.emit('legendToggle', { index, visible: this.series[index].visible });
       }
+    }
+
+    /**
+     * Recalculate bar dataset indices based on visible series only.
+     * This ensures bars redistribute evenly when one is hidden.
+     * @private
+     */
+    _recalcBarPositions() {
+      let visibleIndex = 0;
+      const visibleCount = this.series.filter(s => s.visible).length;
+      this.series.forEach(s => {
+        if (s.setDatasetIndex) {
+          if (s.visible) {
+            s.setDatasetIndex(visibleIndex, visibleCount);
+            visibleIndex++;
+          } else {
+            // Keep original index but set totalDatasets to visibleCount
+            s.setDatasetIndex(0, visibleCount);
+          }
+        }
+      });
     }
 
     /**

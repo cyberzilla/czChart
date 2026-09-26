@@ -773,8 +773,8 @@
     _handleClick(e) {
       if (this._destroyed) return;
       
-      // Toggle point selection on line/area/scatter/radar charts
-      if (this.type === 'line' || this.type === 'area' || this.type === 'scatter' || this.type === 'radar') {
+      // Toggle point selection on line/area/scatter/radar/bar charts
+      if (this.type === 'line' || this.type === 'area' || this.type === 'scatter' || this.type === 'radar' || this.type === 'bar') {
         const rect = this.renderer.getMainCanvas().getBoundingClientRect();
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
@@ -786,10 +786,23 @@
         let bestSeries = null;
         let bestDist = Infinity;
         for (const s of this.series) {
-          if (!s.togglePoint || !s.visible || !s._renderedPoints) continue;
-          for (const pt of s._renderedPoints) {
+          if (!s.togglePoint || !s.visible) continue;
+          // Check rendered points (line/scatter/radar) or rendered bars (bar)
+          const points = s._renderedPoints || [];
+          const bars = s._renderedBars || [];
+          for (const pt of points) {
             if (pt.index !== hit.index) continue;
             const d = Math.sqrt((mx - pt.x) ** 2 + (my - pt.y) ** 2);
+            if (d < bestDist) {
+              bestDist = d;
+              bestSeries = s;
+            }
+          }
+          for (const bar of bars) {
+            if (bar.index !== hit.index) continue;
+            const cx = bar.x + bar.width / 2;
+            const cy = bar.y;
+            const d = Math.sqrt((mx - cx) ** 2 + (my - cy) ** 2);
             if (d < bestDist) {
               bestDist = d;
               bestSeries = s;
@@ -798,7 +811,7 @@
         }
         if (bestSeries && bestDist <= 30) {
           bestSeries.togglePoint(hit.index);
-          this._render(false);
+          // Bounce animation loop handles re-rendering
         }
       }
 
@@ -882,10 +895,38 @@
       // For cartesian charts, toggle series visibility
       if (this.series[index]) {
         this.series[index].visible = !this.series[index].visible;
+
+        // For bar charts, recalculate grouped positions so visible bars
+        // redistribute evenly (no empty gaps)
+        if (this.type === 'bar') {
+          this._recalcBarPositions();
+        }
+
         this._updateLegend();
         this._render(true);
         this.emit('legendToggle', { index, visible: this.series[index].visible });
       }
+    }
+
+    /**
+     * Recalculate bar dataset indices based on visible series only.
+     * This ensures bars redistribute evenly when one is hidden.
+     * @private
+     */
+    _recalcBarPositions() {
+      let visibleIndex = 0;
+      const visibleCount = this.series.filter(s => s.visible).length;
+      this.series.forEach(s => {
+        if (s.setDatasetIndex) {
+          if (s.visible) {
+            s.setDatasetIndex(visibleIndex, visibleCount);
+            visibleIndex++;
+          } else {
+            // Keep original index but set totalDatasets to visibleCount
+            s.setDatasetIndex(0, visibleCount);
+          }
+        }
+      });
     }
 
     /**
