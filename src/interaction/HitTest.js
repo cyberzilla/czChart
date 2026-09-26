@@ -72,13 +72,40 @@
             const items = [];
             let label = nearest.label;
 
-            // For radial charts (pie/donut), return single item
+            // For radial charts (pie/donut/funnel/gauge), return single item
             if (this.chart.isRadial && this.chart.type !== 'radar') {
                 items.push({
                     seriesName: nearest.label || nearest.seriesName || 'Value',
                     value: nearest.value,
                     color: nearest.color || '#000'
                 });
+                return {
+                    index: nearest.index,
+                    label: label || '',
+                    x: nearest.x,
+                    items: items
+                };
+            }
+
+            // For candlestick, show OHLC values as separate rows
+            if (this.chart.type === 'candlestick') {
+                const series = this.chart.series[0];
+                if (series && series._renderedBars) {
+                    const bar = series._renderedBars.find(b => b.index === nearest.index);
+                    if (bar && bar.ohlc) {
+                        const ohlc = bar.ohlc;
+                        const bullColor = series.options.bullishColor || '#10b981';
+                        const bearColor = series.options.bearishColor || '#ef4444';
+                        const color = ohlc.close >= ohlc.open ? bullColor : bearColor;
+                        items.push({ seriesName: 'Open', value: ohlc.open, color });
+                        items.push({ seriesName: 'High', value: ohlc.high, color });
+                        items.push({ seriesName: 'Low', value: ohlc.low, color });
+                        items.push({ seriesName: 'Close', value: ohlc.close, color });
+                    }
+                }
+                if (!label && this.chart.normalizedData && this.chart.normalizedData.labels) {
+                    label = this.chart.normalizedData.labels[nearest.index];
+                }
                 return {
                     index: nearest.index,
                     label: label || '',
@@ -94,9 +121,12 @@
 
                 const dataset = series.dataset;
                 if (dataset && dataset.values && dataset.values[nearest.index] !== undefined) {
+                    const val = dataset.values[nearest.index];
+                    // Skip object values (e.g. OHLC) — they need special handling above
+                    if (typeof val === 'object' && val !== null) continue;
                     items.push({
                         seriesName: dataset.name || ('Series ' + (i + 1)),
-                        value: dataset.values[nearest.index],
+                        value: val,
                         color: dataset.color || '#000'
                     });
                 }

@@ -22,11 +22,11 @@ class HeatmapSeries {
     }
 
     getLegendItems() {
-        if (!this.options.visible || !this.dataset) return [];
+        if (!this.dataset) return [];
         return [{
             name: this.dataset.name || `Dataset ${this.options.datasetIndex + 1}`,
             color: this.options.colorScale[1],
-            visible: this.options.visible,
+            visible: this.visible,
             datasetIndex: this.options.datasetIndex
         }];
     }
@@ -61,11 +61,27 @@ class HeatmapSeries {
         return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
     }
 
-    _interpolateColor(color1, color2, t) {
-        if (window.CZ && window.CZ.ColorUtils && window.CZ.ColorUtils.interpolate) {
-            return window.CZ.ColorUtils.interpolate(color1, color2, t);
+    _interpolateColor(colorScale, t) {
+        t = Math.max(0, Math.min(1, t));
+        
+        // Support multi-stop color scales
+        if (Array.isArray(colorScale)) {
+            const n = colorScale.length;
+            if (n === 0) return '#000000';
+            if (n === 1) return colorScale[0];
+            
+            // Find which segment t falls into
+            const segment = t * (n - 1);
+            const i = Math.min(Math.floor(segment), n - 2);
+            const localT = segment - i;
+            
+            return this._lerpColor(colorScale[i], colorScale[i + 1], localT);
         }
         
+        return colorScale;
+    }
+
+    _lerpColor(color1, color2, t) {
         const c1 = this._hexToRgb(color1);
         const c2 = this._hexToRgb(color2);
         
@@ -97,11 +113,12 @@ class HeatmapSeries {
     }
 
     draw(ctx, plotArea, xScale, yScale, progress) {
-        if (!this.options.visible) return;
+        // Only the first visible heatmap series draws all rows
+        const allHeatmap = this.chart.series.filter(s => s instanceof HeatmapSeries);
+        const firstVisible = allHeatmap.find(s => s.visible);
+        if (!firstVisible || firstVisible !== this) return;
         
-        if (this.options.datasetIndex > 0) return;
-        
-        const allSeries = this.chart.series.filter(s => s instanceof HeatmapSeries && s.options.visible);
+        const allSeries = allHeatmap.filter(s => s.visible);
         if (allSeries.length === 0) return;
         
         const numRows = allSeries.length;
@@ -134,39 +151,67 @@ class HeatmapSeries {
         const pad = this.options.cellPadding;
         const radius = this.options.borderRadius;
         
-        const colorMin = this.options.colorScale[0];
-        const colorMax = this.options.colorScale[1];
+        const colorScale = this.options.colorScale;
         
         ctx.save();
+        
+        // Draw Y axis title if provided (rotated vertically)
+        const yAxisOpts = this.chart.options && this.chart.options.yAxis;
+        if (yAxisOpts && yAxisOpts.title) {
+            ctx.save();
+            ctx.fillStyle = yAxisOpts.titleColor || '#6b7280';
+            ctx.font = yAxisOpts.titleFont || '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            const tx = 14;
+            const ty = plotArea.top + plotArea.height / 2;
+            ctx.translate(tx, ty);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText(yAxisOpts.title, 0, 0);
+            ctx.restore();
+        }
         
         // Draw row labels on Y axis
         ctx.fillStyle = '#666666';
         ctx.font = '12px sans-serif';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
+        
+        // Determine highlight state
+        const highlightRow = this._highlightSlice !== undefined ? this._highlightSlice : -1;
+        
         for (let rowIndex = 0; rowIndex < numRows; rowIndex++) {
             const series = allSeries[rowIndex];
             const name = series.dataset.name || `Row ${rowIndex + 1}`;
             const cy = plotArea.top + rowIndex * cellHeight + cellHeight / 2;
+            const seriesIdx = series.options.datasetIndex !== undefined ? series.options.datasetIndex : rowIndex;
+            
+            // Dim label if another row is highlighted
+            ctx.globalAlpha = (highlightRow >= 0 && seriesIdx !== highlightRow) ? 0.15 : 1.0;
             ctx.fillText(name, plotArea.left - 10, cy);
         }
+        ctx.globalAlpha = 1.0;
 
         ctx.beginPath();
         ctx.rect(plotArea.left, plotArea.top, plotArea.width, plotArea.height);
         ctx.clip();
         
-        ctx.globalAlpha = progress !== undefined ? progress : 1;
+        const baseAlpha = progress !== undefined ? progress : 1;
         
         for (let rowIndex = 0; rowIndex < numRows; rowIndex++) {
             const series = allSeries[rowIndex];
             const values = series.dataset.values || [];
+            const seriesIdx = series.options.datasetIndex !== undefined ? series.options.datasetIndex : rowIndex;
+            
+            // Apply row highlight dimming
+            const rowAlpha = (highlightRow >= 0 && seriesIdx !== highlightRow) ? 0.15 : 1.0;
             
             for (let colIndex = 0; colIndex < numCols; colIndex++) {
                 const val = values[colIndex];
                 if (val === null || val === undefined || isNaN(val)) continue;
                 
                 const t = (val - globalMin) / (globalMax - globalMin);
-                const color = this._interpolateColor(colorMin, colorMax, Math.max(0, Math.min(1, t)));
+                const color = this._interpolateColor(colorScale, t);
                 
                 const cellX = plotArea.left + colIndex * cellWidth;
                 const cellY = plotArea.top + rowIndex * cellHeight;
@@ -177,6 +222,8 @@ class HeatmapSeries {
                 const cy = cellY + pad;
                 
                 if (w <= 0 || h <= 0) continue;
+                
+                ctx.globalAlpha = baseAlpha * rowAlpha;
                 
                 ctx.beginPath();
                 if (ctx.roundRect) {
@@ -220,6 +267,7 @@ class HeatmapSeries {
                 }
             }
         }
+        ctx.globalAlpha = 1.0;
         
         ctx.restore();
     }

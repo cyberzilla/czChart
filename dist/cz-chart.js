@@ -2,7 +2,7 @@
  * czChart v1.0.0 — Lightweight, Data-Driven Chart Library
  * (c) 2026 CyberZilla
  * Released under the MIT License
- * Built: 2026-09-26T04:26:50.466Z
+ * Built: 2026-09-26T05:23:21.203Z
  */
 
 (function(global) {
@@ -4066,11 +4066,11 @@ class GaugeSeries {
                 animatedDisplayVal = Math.round(animatedDisplayVal).toString();
             }
             
-            ctx.font = `bold ${Math.max(16, maxRadius * 0.15)}px sans-serif`;
+            ctx.font = `bold ${Math.max(14, Math.min(36, maxRadius * 0.12))}px sans-serif`;
             ctx.fillStyle = '#111827';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
-            ctx.fillText(animatedDisplayVal, cx, cy + maxRadius * 0.12);
+            ctx.fillText(animatedDisplayVal, cx, cy + maxRadius * 0.08);
         }
 
         ctx.restore();
@@ -4286,12 +4286,13 @@ class FunnelSeries {
         this._colors = [];
         const numItems = (this.dataset.values || []).length;
         
-        // Generate colors for each section
+        // Use per-item colors from data if available, otherwise auto-generate
         for (let i = 0; i < numItems; i++) {
-            if (window.CZ && window.CZ.ColorUtils) {
+            if (dataset.pointColors && dataset.pointColors[i]) {
+                this._colors.push(dataset.pointColors[i]);
+            } else if (window.CZ && window.CZ.ColorUtils) {
                 this._colors.push(window.CZ.ColorUtils.getSeriesColor(i));
             } else {
-                // Fallback basic colors
                 const fallbackColors = ['#4e79a7', '#f28e2c', '#e15759', '#76b7b2', '#59a14f', '#edc949'];
                 this._colors.push(fallbackColors[i % fallbackColors.length]);
             }
@@ -4378,12 +4379,12 @@ class FunnelSeries {
             }
             
             let bottomWidthRatio = nextValue > 0 ? (nextValue / maxValue) : this.options.neckWidth;
-            if (bottomWidthRatio < this.options.neckWidth) {
-                bottomWidthRatio = this.options.neckWidth;
-            }
             if (visibleIndex === visibleCount - 1) {
-                bottomWidthRatio = this.options.neckWidth;
+                // Last section: taper to neckWidth but never wider than the top
+                bottomWidthRatio = Math.min(this.options.neckWidth, topWidthRatio * 0.3);
             }
+            // Never make bottom wider than top (prevents inverted trapezoid)
+            bottomWidthRatio = Math.min(bottomWidthRatio, topWidthRatio);
             
             const topWidth = maxWidth * topWidthRatio;
             const bottomWidth = maxWidth * bottomWidthRatio;
@@ -4403,7 +4404,11 @@ class FunnelSeries {
             this._renderedSlices.push({ index: i, poly, value });
             
             ctx.save();
-            ctx.globalAlpha = progress;
+            
+            // Legend hover highlight: dim non-highlighted sections
+            const highlightIdx = this._highlightSlice !== undefined ? this._highlightSlice : -1;
+            const isDimmed = highlightIdx >= 0 && i !== highlightIdx;
+            ctx.globalAlpha = progress * (isDimmed ? 0.15 : 1.0);
             
             if (isHovered) {
                 ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
@@ -4435,39 +4440,45 @@ class FunnelSeries {
             
             if (this.options.showLabels) {
                 ctx.save();
-                ctx.globalAlpha = progress;
+                ctx.globalAlpha = progress * (isDimmed ? 0.15 : 1.0);
                 const label = labels[i] || `Item ${i + 1}`;
                 const total = values.reduce((sum, val, idx) => sum + (this._hiddenSlices.has(idx) ? 0 : val), 0);
                 const percent = total > 0 ? ((value / total) * 100).toFixed(1) + '%' : '0%';
-                const text = `${label} (${percent})`;
+                const text = percent;
                 
-                ctx.fillStyle = isHovered ? '#000' : '#333';
-                ctx.font = isHovered ? 'bold 12px Arial, sans-serif' : '12px Arial, sans-serif';
+                // Auto-size font to fit within the section
+                const avgWidth = (topWidth + bottomWidth) / 2;
+                const fontSize = Math.max(10, Math.min(14, avgWidth * 0.12, sectionHeight * 0.5));
                 
-                const yCenter = currentY + sectionHeight / 2;
+                // Skip text if section is too small to display it
+                const textFits = avgWidth > 30 && sectionHeight > 16 && fontSize >= 10;
                 
-                if (this.options.labelPosition === 'center') {
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillStyle = '#ffffff';
+                if (textFits) {
+                    ctx.fillStyle = isHovered ? '#000' : '#333';
+                    ctx.font = isHovered ? `bold ${fontSize}px Arial, sans-serif` : `${fontSize}px Arial, sans-serif`;
                     
-                    // Simple text shadow for better contrast
-                    ctx.shadowColor = 'rgba(0,0,0,0.5)';
-                    ctx.shadowBlur = 4;
-                    ctx.fillText(text, centerX, yCenter);
-                } else {
-                    ctx.textAlign = 'left';
-                    ctx.textBaseline = 'middle';
-                    const xRight = centerX + maxWidth / 2 + 15;
-                    ctx.fillText(text, xRight, yCenter);
+                    const yCenter = currentY + sectionHeight / 2;
                     
-                    // Connecting line
-                    ctx.beginPath();
-                    const edgeX = centerX + (topWidth + bottomWidth) / 4; // approximate edge
-                    ctx.moveTo(edgeX, yCenter);
-                    ctx.lineTo(xRight - 5, yCenter);
-                    ctx.strokeStyle = '#999999';
-                    ctx.stroke();
+                    if (this.options.labelPosition === 'center') {
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillStyle = '#ffffff';
+                        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                        ctx.shadowBlur = 4;
+                        ctx.fillText(text, centerX, yCenter);
+                    } else {
+                        ctx.textAlign = 'left';
+                        ctx.textBaseline = 'middle';
+                        const xRight = centerX + maxWidth / 2 + 15;
+                        ctx.fillText(text, xRight, yCenter);
+                        
+                        ctx.beginPath();
+                        const edgeX = centerX + (topWidth + bottomWidth) / 4;
+                        ctx.moveTo(edgeX, yCenter);
+                        ctx.lineTo(xRight - 5, yCenter);
+                        ctx.strokeStyle = '#999999';
+                        ctx.stroke();
+                    }
                 }
                 
                 ctx.restore();
@@ -4544,11 +4555,17 @@ class FunnelSeries {
             }
             
             if (inside) {
+                const labels = (this.chart.normalizedData && this.chart.normalizedData.labels) || [];
                 return {
                     series: this,
                     index: slice.index,
                     value: slice.value,
-                    datasetIndex: slice.index
+                    datasetIndex: slice.index,
+                    x: slice.poly[0] ? (slice.poly[0].x + slice.poly[1].x) / 2 : 0,
+                    y: slice.poly[0] ? (slice.poly[0].y + slice.poly[2].y) / 2 : 0,
+                    label: labels[slice.index] || ('Section ' + (slice.index + 1)),
+                    seriesName: labels[slice.index] || ('Section ' + (slice.index + 1)),
+                    color: this._colors[slice.index] || '#000'
                 };
             }
         }
@@ -4589,11 +4606,11 @@ class HeatmapSeries {
     }
 
     getLegendItems() {
-        if (!this.options.visible || !this.dataset) return [];
+        if (!this.dataset) return [];
         return [{
             name: this.dataset.name || `Dataset ${this.options.datasetIndex + 1}`,
             color: this.options.colorScale[1],
-            visible: this.options.visible,
+            visible: this.visible,
             datasetIndex: this.options.datasetIndex
         }];
     }
@@ -4628,11 +4645,27 @@ class HeatmapSeries {
         return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
     }
 
-    _interpolateColor(color1, color2, t) {
-        if (window.CZ && window.CZ.ColorUtils && window.CZ.ColorUtils.interpolate) {
-            return window.CZ.ColorUtils.interpolate(color1, color2, t);
+    _interpolateColor(colorScale, t) {
+        t = Math.max(0, Math.min(1, t));
+        
+        // Support multi-stop color scales
+        if (Array.isArray(colorScale)) {
+            const n = colorScale.length;
+            if (n === 0) return '#000000';
+            if (n === 1) return colorScale[0];
+            
+            // Find which segment t falls into
+            const segment = t * (n - 1);
+            const i = Math.min(Math.floor(segment), n - 2);
+            const localT = segment - i;
+            
+            return this._lerpColor(colorScale[i], colorScale[i + 1], localT);
         }
         
+        return colorScale;
+    }
+
+    _lerpColor(color1, color2, t) {
         const c1 = this._hexToRgb(color1);
         const c2 = this._hexToRgb(color2);
         
@@ -4664,11 +4697,12 @@ class HeatmapSeries {
     }
 
     draw(ctx, plotArea, xScale, yScale, progress) {
-        if (!this.options.visible) return;
+        // Only the first visible heatmap series draws all rows
+        const allHeatmap = this.chart.series.filter(s => s instanceof HeatmapSeries);
+        const firstVisible = allHeatmap.find(s => s.visible);
+        if (!firstVisible || firstVisible !== this) return;
         
-        if (this.options.datasetIndex > 0) return;
-        
-        const allSeries = this.chart.series.filter(s => s instanceof HeatmapSeries && s.options.visible);
+        const allSeries = allHeatmap.filter(s => s.visible);
         if (allSeries.length === 0) return;
         
         const numRows = allSeries.length;
@@ -4701,39 +4735,67 @@ class HeatmapSeries {
         const pad = this.options.cellPadding;
         const radius = this.options.borderRadius;
         
-        const colorMin = this.options.colorScale[0];
-        const colorMax = this.options.colorScale[1];
+        const colorScale = this.options.colorScale;
         
         ctx.save();
+        
+        // Draw Y axis title if provided (rotated vertically)
+        const yAxisOpts = this.chart.options && this.chart.options.yAxis;
+        if (yAxisOpts && yAxisOpts.title) {
+            ctx.save();
+            ctx.fillStyle = yAxisOpts.titleColor || '#6b7280';
+            ctx.font = yAxisOpts.titleFont || '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            const tx = 14;
+            const ty = plotArea.top + plotArea.height / 2;
+            ctx.translate(tx, ty);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText(yAxisOpts.title, 0, 0);
+            ctx.restore();
+        }
         
         // Draw row labels on Y axis
         ctx.fillStyle = '#666666';
         ctx.font = '12px sans-serif';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
+        
+        // Determine highlight state
+        const highlightRow = this._highlightSlice !== undefined ? this._highlightSlice : -1;
+        
         for (let rowIndex = 0; rowIndex < numRows; rowIndex++) {
             const series = allSeries[rowIndex];
             const name = series.dataset.name || `Row ${rowIndex + 1}`;
             const cy = plotArea.top + rowIndex * cellHeight + cellHeight / 2;
+            const seriesIdx = series.options.datasetIndex !== undefined ? series.options.datasetIndex : rowIndex;
+            
+            // Dim label if another row is highlighted
+            ctx.globalAlpha = (highlightRow >= 0 && seriesIdx !== highlightRow) ? 0.15 : 1.0;
             ctx.fillText(name, plotArea.left - 10, cy);
         }
+        ctx.globalAlpha = 1.0;
 
         ctx.beginPath();
         ctx.rect(plotArea.left, plotArea.top, plotArea.width, plotArea.height);
         ctx.clip();
         
-        ctx.globalAlpha = progress !== undefined ? progress : 1;
+        const baseAlpha = progress !== undefined ? progress : 1;
         
         for (let rowIndex = 0; rowIndex < numRows; rowIndex++) {
             const series = allSeries[rowIndex];
             const values = series.dataset.values || [];
+            const seriesIdx = series.options.datasetIndex !== undefined ? series.options.datasetIndex : rowIndex;
+            
+            // Apply row highlight dimming
+            const rowAlpha = (highlightRow >= 0 && seriesIdx !== highlightRow) ? 0.15 : 1.0;
             
             for (let colIndex = 0; colIndex < numCols; colIndex++) {
                 const val = values[colIndex];
                 if (val === null || val === undefined || isNaN(val)) continue;
                 
                 const t = (val - globalMin) / (globalMax - globalMin);
-                const color = this._interpolateColor(colorMin, colorMax, Math.max(0, Math.min(1, t)));
+                const color = this._interpolateColor(colorScale, t);
                 
                 const cellX = plotArea.left + colIndex * cellWidth;
                 const cellY = plotArea.top + rowIndex * cellHeight;
@@ -4744,6 +4806,8 @@ class HeatmapSeries {
                 const cy = cellY + pad;
                 
                 if (w <= 0 || h <= 0) continue;
+                
+                ctx.globalAlpha = baseAlpha * rowAlpha;
                 
                 ctx.beginPath();
                 if (ctx.roundRect) {
@@ -4787,6 +4851,7 @@ class HeatmapSeries {
                 }
             }
         }
+        ctx.globalAlpha = 1.0;
         
         ctx.restore();
     }
@@ -4914,13 +4979,40 @@ window.CZ.HeatmapSeries = HeatmapSeries;
             const items = [];
             let label = nearest.label;
 
-            // For radial charts (pie/donut), return single item
+            // For radial charts (pie/donut/funnel/gauge), return single item
             if (this.chart.isRadial && this.chart.type !== 'radar') {
                 items.push({
                     seriesName: nearest.label || nearest.seriesName || 'Value',
                     value: nearest.value,
                     color: nearest.color || '#000'
                 });
+                return {
+                    index: nearest.index,
+                    label: label || '',
+                    x: nearest.x,
+                    items: items
+                };
+            }
+
+            // For candlestick, show OHLC values as separate rows
+            if (this.chart.type === 'candlestick') {
+                const series = this.chart.series[0];
+                if (series && series._renderedBars) {
+                    const bar = series._renderedBars.find(b => b.index === nearest.index);
+                    if (bar && bar.ohlc) {
+                        const ohlc = bar.ohlc;
+                        const bullColor = series.options.bullishColor || '#10b981';
+                        const bearColor = series.options.bearishColor || '#ef4444';
+                        const color = ohlc.close >= ohlc.open ? bullColor : bearColor;
+                        items.push({ seriesName: 'Open', value: ohlc.open, color });
+                        items.push({ seriesName: 'High', value: ohlc.high, color });
+                        items.push({ seriesName: 'Low', value: ohlc.low, color });
+                        items.push({ seriesName: 'Close', value: ohlc.close, color });
+                    }
+                }
+                if (!label && this.chart.normalizedData && this.chart.normalizedData.labels) {
+                    label = this.chart.normalizedData.labels[nearest.index];
+                }
                 return {
                     index: nearest.index,
                     label: label || '',
@@ -4936,9 +5028,12 @@ window.CZ.HeatmapSeries = HeatmapSeries;
 
                 const dataset = series.dataset;
                 if (dataset && dataset.values && dataset.values[nearest.index] !== undefined) {
+                    const val = dataset.values[nearest.index];
+                    // Skip object values (e.g. OHLC) — they need special handling above
+                    if (typeof val === 'object' && val !== null) continue;
                     items.push({
                         seriesName: dataset.name || ('Series ' + (i + 1)),
-                        value: dataset.values[nearest.index],
+                        value: val,
                         color: dataset.color || '#000'
                     });
                 }
@@ -6126,7 +6221,8 @@ window.CZ.HeatmapSeries = HeatmapSeries;
 
       const ticks = this.scales.y.getTicks();
       ticks.forEach(tick => {
-        const w = ctx.measureText(tick.label).width;
+        const label = tick.label !== undefined ? tick.label : String(tick.value || '');
+        const w = ctx.measureText(label).width;
         if (w > maxWidth) maxWidth = w;
       });
 
@@ -6137,6 +6233,53 @@ window.CZ.HeatmapSeries = HeatmapSeries;
     /** @private */
     _computeScales() {
       if (this.isRadial || !this.normalizedData) return;
+
+      // Heatmap handles its own grid layout, skip normal scale computation
+      if (this.type === 'heatmap') {
+        // Create minimal scales that the heatmap series can use
+        this.scales.x = new CZ.CategoryScale({ maxTicks: this.options.xAxis.maxTicks });
+        this.scales.x.configure(this.normalizedData.labels, this.plotArea.left, this.plotArea.right);
+        // No Y scale needed — heatmap series draws its own row labels
+        this.scales.y = null;
+        return;
+      }
+
+      // Horizontal Bar: SWAP axes — X = Linear (values), Y = Category (labels)
+      if (this.type === 'horizontalBar') {
+        // Y axis = categories (labels)
+        this.scales.y = new CZ.CategoryScale({ maxTicks: this.options.yAxis.maxTicks });
+        this.scales.y.configure(this.normalizedData.labels, this.plotArea.top, this.plotArea.bottom);
+
+        // X axis = values (linear)
+        let minX = 0, maxX = -Infinity;
+        this.series.forEach(s => {
+          if (!s.visible) return;
+          const bounds = s.getBounds();
+          if (bounds) {
+            if (bounds.minY < minX) minX = bounds.minY;
+            if (bounds.maxY > maxX) maxX = bounds.maxY;
+          }
+        });
+        if (!isFinite(maxX) || maxX <= 0) maxX = 100;
+        if (this.options.xAxis.beginAtZero !== false) minX = Math.min(0, minX);
+
+        const xFormat = this.options.xAxis.format || (val => {
+          if (Math.abs(val) >= 1000000) return (val / 1000000).toFixed(1) + 'M';
+          if (Math.abs(val) >= 1000) return (val / 1000).toFixed(1) + 'K';
+          if (Number.isInteger(val)) return val.toString();
+          return val.toFixed(1);
+        });
+
+        this.scales.x = new CZ.LinearScale({
+          beginAtZero: this.options.xAxis.beginAtZero !== false,
+          maxTicks: this.options.xAxis.maxTicks,
+          format: xFormat
+        });
+        this.scales.x.configure(minX, maxX, this.plotArea.left, this.plotArea.right);
+
+        this._recomputeLayoutWithScales();
+        return;
+      }
 
       // X Scale
       if (this.type === 'scatter') {
@@ -6233,7 +6376,20 @@ window.CZ.HeatmapSeries = HeatmapSeries;
 
         // Reconfigure X scale with updated plot area
         if (this.scales.x && this.scales.x.configure) {
-          if (this.normalizedData.xType === 'category' || this.normalizedData.xType === 'time') {
+          if (this.type === 'horizontalBar') {
+            // HorizontalBar: X is LinearScale (values), reconfigure with value bounds
+            let minX = 0, maxX = -Infinity;
+            this.series.forEach(s => {
+              if (!s.visible) return;
+              const bounds = s.getBounds();
+              if (bounds) {
+                if (bounds.minY < minX) minX = bounds.minY;
+                if (bounds.maxY > maxX) maxX = bounds.maxY;
+              }
+            });
+            if (!isFinite(maxX) || maxX <= 0) maxX = 100;
+            this.scales.x.configure(minX, maxX, this.plotArea.left, this.plotArea.right);
+          } else if (this.normalizedData.xType === 'category' || this.normalizedData.xType === 'time') {
             this.scales.x.configure(
               this.normalizedData.labels,
               this.plotArea.left,
@@ -6248,6 +6404,11 @@ window.CZ.HeatmapSeries = HeatmapSeries;
               this.plotArea.right
             );
           }
+        }
+
+        // For horizontalBar, also reconfigure Y category scale with updated plot area
+        if (this.type === 'horizontalBar' && this.scales.y && this.scales.y.configure) {
+          this.scales.y.configure(this.normalizedData.labels, this.plotArea.top, this.plotArea.bottom);
         }
       }
     }
@@ -6282,7 +6443,7 @@ window.CZ.HeatmapSeries = HeatmapSeries;
 
       // Draw grid and axes (cartesian only)
       if (!this.isRadial) {
-        if (CZ.Grid) {
+        if (CZ.Grid && this.scales.y) {
           const grid = new CZ.Grid(this.options);
           grid.draw(ctx, this.plotArea, this.scales.x, this.scales.y, this.options);
         }
@@ -6291,13 +6452,15 @@ window.CZ.HeatmapSeries = HeatmapSeries;
         if (CZ.Axis) {
           const axis = new CZ.Axis(this.options);
           axis.drawXAxis(ctx, this.plotArea, this.scales.x, this.options.xAxis);
-          axis.drawYAxis(ctx, this.plotArea, this.scales.y, this.options.yAxis);
+          if (this.scales.y) {
+            axis.drawYAxis(ctx, this.plotArea, this.scales.y, this.options.yAxis);
+          }
         }
       }
 
       // Draw series
       const highlightIdx = this._highlightIndex !== undefined ? this._highlightIndex : -1;
-      const isPieDonut = (this.type === 'pie' || this.type === 'donut');
+      const isPieDonut = (this.type === 'pie' || this.type === 'donut' || this.type === 'funnel' || this.type === 'heatmap');
 
       const drawSeries = (progress) => {
         ctx.save();
@@ -6342,14 +6505,16 @@ window.CZ.HeatmapSeries = HeatmapSeries;
           }
 
           if (!this.isRadial) {
-            if (CZ.Grid) {
+            if (CZ.Grid && this.scales.y) {
               const grid = new CZ.Grid(this.options);
               grid.draw(ctx, this.plotArea, this.scales.x, this.scales.y, this.options);
             }
             if (CZ.Axis) {
               const axis = new CZ.Axis(this.options);
               axis.drawXAxis(ctx, this.plotArea, this.scales.x, this.options.xAxis);
-              axis.drawYAxis(ctx, this.plotArea, this.scales.y, this.options.yAxis);
+              if (this.scales.y) {
+                axis.drawYAxis(ctx, this.plotArea, this.scales.y, this.options.yAxis);
+              }
             }
           }
 
@@ -6381,7 +6546,7 @@ window.CZ.HeatmapSeries = HeatmapSeries;
       const overlayCtx = this.renderer.getOverlayContext();
 
       const newHoverIndex = hitNearest ? hitNearest.index : -1;
-      const isPieDonut = (this.type === 'pie' || this.type === 'donut');
+      const isPieDonut = (this.type === 'pie' || this.type === 'donut' || this.type === 'funnel');
 
       if (hitNearest) {
         // Crosshair (cartesian only)

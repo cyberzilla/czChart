@@ -24,12 +24,13 @@ class FunnelSeries {
         this._colors = [];
         const numItems = (this.dataset.values || []).length;
         
-        // Generate colors for each section
+        // Use per-item colors from data if available, otherwise auto-generate
         for (let i = 0; i < numItems; i++) {
-            if (window.CZ && window.CZ.ColorUtils) {
+            if (dataset.pointColors && dataset.pointColors[i]) {
+                this._colors.push(dataset.pointColors[i]);
+            } else if (window.CZ && window.CZ.ColorUtils) {
                 this._colors.push(window.CZ.ColorUtils.getSeriesColor(i));
             } else {
-                // Fallback basic colors
                 const fallbackColors = ['#4e79a7', '#f28e2c', '#e15759', '#76b7b2', '#59a14f', '#edc949'];
                 this._colors.push(fallbackColors[i % fallbackColors.length]);
             }
@@ -116,12 +117,12 @@ class FunnelSeries {
             }
             
             let bottomWidthRatio = nextValue > 0 ? (nextValue / maxValue) : this.options.neckWidth;
-            if (bottomWidthRatio < this.options.neckWidth) {
-                bottomWidthRatio = this.options.neckWidth;
-            }
             if (visibleIndex === visibleCount - 1) {
-                bottomWidthRatio = this.options.neckWidth;
+                // Last section: taper to neckWidth but never wider than the top
+                bottomWidthRatio = Math.min(this.options.neckWidth, topWidthRatio * 0.3);
             }
+            // Never make bottom wider than top (prevents inverted trapezoid)
+            bottomWidthRatio = Math.min(bottomWidthRatio, topWidthRatio);
             
             const topWidth = maxWidth * topWidthRatio;
             const bottomWidth = maxWidth * bottomWidthRatio;
@@ -141,7 +142,11 @@ class FunnelSeries {
             this._renderedSlices.push({ index: i, poly, value });
             
             ctx.save();
-            ctx.globalAlpha = progress;
+            
+            // Legend hover highlight: dim non-highlighted sections
+            const highlightIdx = this._highlightSlice !== undefined ? this._highlightSlice : -1;
+            const isDimmed = highlightIdx >= 0 && i !== highlightIdx;
+            ctx.globalAlpha = progress * (isDimmed ? 0.15 : 1.0);
             
             if (isHovered) {
                 ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
@@ -173,39 +178,45 @@ class FunnelSeries {
             
             if (this.options.showLabels) {
                 ctx.save();
-                ctx.globalAlpha = progress;
+                ctx.globalAlpha = progress * (isDimmed ? 0.15 : 1.0);
                 const label = labels[i] || `Item ${i + 1}`;
                 const total = values.reduce((sum, val, idx) => sum + (this._hiddenSlices.has(idx) ? 0 : val), 0);
                 const percent = total > 0 ? ((value / total) * 100).toFixed(1) + '%' : '0%';
-                const text = `${label} (${percent})`;
+                const text = percent;
                 
-                ctx.fillStyle = isHovered ? '#000' : '#333';
-                ctx.font = isHovered ? 'bold 12px Arial, sans-serif' : '12px Arial, sans-serif';
+                // Auto-size font to fit within the section
+                const avgWidth = (topWidth + bottomWidth) / 2;
+                const fontSize = Math.max(10, Math.min(14, avgWidth * 0.12, sectionHeight * 0.5));
                 
-                const yCenter = currentY + sectionHeight / 2;
+                // Skip text if section is too small to display it
+                const textFits = avgWidth > 30 && sectionHeight > 16 && fontSize >= 10;
                 
-                if (this.options.labelPosition === 'center') {
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillStyle = '#ffffff';
+                if (textFits) {
+                    ctx.fillStyle = isHovered ? '#000' : '#333';
+                    ctx.font = isHovered ? `bold ${fontSize}px Arial, sans-serif` : `${fontSize}px Arial, sans-serif`;
                     
-                    // Simple text shadow for better contrast
-                    ctx.shadowColor = 'rgba(0,0,0,0.5)';
-                    ctx.shadowBlur = 4;
-                    ctx.fillText(text, centerX, yCenter);
-                } else {
-                    ctx.textAlign = 'left';
-                    ctx.textBaseline = 'middle';
-                    const xRight = centerX + maxWidth / 2 + 15;
-                    ctx.fillText(text, xRight, yCenter);
+                    const yCenter = currentY + sectionHeight / 2;
                     
-                    // Connecting line
-                    ctx.beginPath();
-                    const edgeX = centerX + (topWidth + bottomWidth) / 4; // approximate edge
-                    ctx.moveTo(edgeX, yCenter);
-                    ctx.lineTo(xRight - 5, yCenter);
-                    ctx.strokeStyle = '#999999';
-                    ctx.stroke();
+                    if (this.options.labelPosition === 'center') {
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillStyle = '#ffffff';
+                        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                        ctx.shadowBlur = 4;
+                        ctx.fillText(text, centerX, yCenter);
+                    } else {
+                        ctx.textAlign = 'left';
+                        ctx.textBaseline = 'middle';
+                        const xRight = centerX + maxWidth / 2 + 15;
+                        ctx.fillText(text, xRight, yCenter);
+                        
+                        ctx.beginPath();
+                        const edgeX = centerX + (topWidth + bottomWidth) / 4;
+                        ctx.moveTo(edgeX, yCenter);
+                        ctx.lineTo(xRight - 5, yCenter);
+                        ctx.strokeStyle = '#999999';
+                        ctx.stroke();
+                    }
                 }
                 
                 ctx.restore();
@@ -282,11 +293,17 @@ class FunnelSeries {
             }
             
             if (inside) {
+                const labels = (this.chart.normalizedData && this.chart.normalizedData.labels) || [];
                 return {
                     series: this,
                     index: slice.index,
                     value: slice.value,
-                    datasetIndex: slice.index
+                    datasetIndex: slice.index,
+                    x: slice.poly[0] ? (slice.poly[0].x + slice.poly[1].x) / 2 : 0,
+                    y: slice.poly[0] ? (slice.poly[0].y + slice.poly[2].y) / 2 : 0,
+                    label: labels[slice.index] || ('Section ' + (slice.index + 1)),
+                    seriesName: labels[slice.index] || ('Section ' + (slice.index + 1)),
+                    color: this._colors[slice.index] || '#000'
                 };
             }
         }

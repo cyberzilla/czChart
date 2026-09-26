@@ -446,7 +446,8 @@
 
       const ticks = this.scales.y.getTicks();
       ticks.forEach(tick => {
-        const w = ctx.measureText(tick.label).width;
+        const label = tick.label !== undefined ? tick.label : String(tick.value || '');
+        const w = ctx.measureText(label).width;
         if (w > maxWidth) maxWidth = w;
       });
 
@@ -457,6 +458,53 @@
     /** @private */
     _computeScales() {
       if (this.isRadial || !this.normalizedData) return;
+
+      // Heatmap handles its own grid layout, skip normal scale computation
+      if (this.type === 'heatmap') {
+        // Create minimal scales that the heatmap series can use
+        this.scales.x = new CZ.CategoryScale({ maxTicks: this.options.xAxis.maxTicks });
+        this.scales.x.configure(this.normalizedData.labels, this.plotArea.left, this.plotArea.right);
+        // No Y scale needed — heatmap series draws its own row labels
+        this.scales.y = null;
+        return;
+      }
+
+      // Horizontal Bar: SWAP axes — X = Linear (values), Y = Category (labels)
+      if (this.type === 'horizontalBar') {
+        // Y axis = categories (labels)
+        this.scales.y = new CZ.CategoryScale({ maxTicks: this.options.yAxis.maxTicks });
+        this.scales.y.configure(this.normalizedData.labels, this.plotArea.top, this.plotArea.bottom);
+
+        // X axis = values (linear)
+        let minX = 0, maxX = -Infinity;
+        this.series.forEach(s => {
+          if (!s.visible) return;
+          const bounds = s.getBounds();
+          if (bounds) {
+            if (bounds.minY < minX) minX = bounds.minY;
+            if (bounds.maxY > maxX) maxX = bounds.maxY;
+          }
+        });
+        if (!isFinite(maxX) || maxX <= 0) maxX = 100;
+        if (this.options.xAxis.beginAtZero !== false) minX = Math.min(0, minX);
+
+        const xFormat = this.options.xAxis.format || (val => {
+          if (Math.abs(val) >= 1000000) return (val / 1000000).toFixed(1) + 'M';
+          if (Math.abs(val) >= 1000) return (val / 1000).toFixed(1) + 'K';
+          if (Number.isInteger(val)) return val.toString();
+          return val.toFixed(1);
+        });
+
+        this.scales.x = new CZ.LinearScale({
+          beginAtZero: this.options.xAxis.beginAtZero !== false,
+          maxTicks: this.options.xAxis.maxTicks,
+          format: xFormat
+        });
+        this.scales.x.configure(minX, maxX, this.plotArea.left, this.plotArea.right);
+
+        this._recomputeLayoutWithScales();
+        return;
+      }
 
       // X Scale
       if (this.type === 'scatter') {
@@ -553,7 +601,20 @@
 
         // Reconfigure X scale with updated plot area
         if (this.scales.x && this.scales.x.configure) {
-          if (this.normalizedData.xType === 'category' || this.normalizedData.xType === 'time') {
+          if (this.type === 'horizontalBar') {
+            // HorizontalBar: X is LinearScale (values), reconfigure with value bounds
+            let minX = 0, maxX = -Infinity;
+            this.series.forEach(s => {
+              if (!s.visible) return;
+              const bounds = s.getBounds();
+              if (bounds) {
+                if (bounds.minY < minX) minX = bounds.minY;
+                if (bounds.maxY > maxX) maxX = bounds.maxY;
+              }
+            });
+            if (!isFinite(maxX) || maxX <= 0) maxX = 100;
+            this.scales.x.configure(minX, maxX, this.plotArea.left, this.plotArea.right);
+          } else if (this.normalizedData.xType === 'category' || this.normalizedData.xType === 'time') {
             this.scales.x.configure(
               this.normalizedData.labels,
               this.plotArea.left,
@@ -568,6 +629,11 @@
               this.plotArea.right
             );
           }
+        }
+
+        // For horizontalBar, also reconfigure Y category scale with updated plot area
+        if (this.type === 'horizontalBar' && this.scales.y && this.scales.y.configure) {
+          this.scales.y.configure(this.normalizedData.labels, this.plotArea.top, this.plotArea.bottom);
         }
       }
     }
@@ -602,7 +668,7 @@
 
       // Draw grid and axes (cartesian only)
       if (!this.isRadial) {
-        if (CZ.Grid) {
+        if (CZ.Grid && this.scales.y) {
           const grid = new CZ.Grid(this.options);
           grid.draw(ctx, this.plotArea, this.scales.x, this.scales.y, this.options);
         }
@@ -611,13 +677,15 @@
         if (CZ.Axis) {
           const axis = new CZ.Axis(this.options);
           axis.drawXAxis(ctx, this.plotArea, this.scales.x, this.options.xAxis);
-          axis.drawYAxis(ctx, this.plotArea, this.scales.y, this.options.yAxis);
+          if (this.scales.y) {
+            axis.drawYAxis(ctx, this.plotArea, this.scales.y, this.options.yAxis);
+          }
         }
       }
 
       // Draw series
       const highlightIdx = this._highlightIndex !== undefined ? this._highlightIndex : -1;
-      const isPieDonut = (this.type === 'pie' || this.type === 'donut');
+      const isPieDonut = (this.type === 'pie' || this.type === 'donut' || this.type === 'funnel' || this.type === 'heatmap');
 
       const drawSeries = (progress) => {
         ctx.save();
@@ -662,14 +730,16 @@
           }
 
           if (!this.isRadial) {
-            if (CZ.Grid) {
+            if (CZ.Grid && this.scales.y) {
               const grid = new CZ.Grid(this.options);
               grid.draw(ctx, this.plotArea, this.scales.x, this.scales.y, this.options);
             }
             if (CZ.Axis) {
               const axis = new CZ.Axis(this.options);
               axis.drawXAxis(ctx, this.plotArea, this.scales.x, this.options.xAxis);
-              axis.drawYAxis(ctx, this.plotArea, this.scales.y, this.options.yAxis);
+              if (this.scales.y) {
+                axis.drawYAxis(ctx, this.plotArea, this.scales.y, this.options.yAxis);
+              }
             }
           }
 
@@ -701,7 +771,7 @@
       const overlayCtx = this.renderer.getOverlayContext();
 
       const newHoverIndex = hitNearest ? hitNearest.index : -1;
-      const isPieDonut = (this.type === 'pie' || this.type === 'donut');
+      const isPieDonut = (this.type === 'pie' || this.type === 'donut' || this.type === 'funnel');
 
       if (hitNearest) {
         // Crosshair (cartesian only)

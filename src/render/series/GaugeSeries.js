@@ -185,11 +185,11 @@ class GaugeSeries {
                 animatedDisplayVal = Math.round(animatedDisplayVal).toString();
             }
             
-            ctx.font = `bold ${Math.max(16, maxRadius * 0.15)}px sans-serif`;
+            ctx.font = `bold ${Math.max(14, Math.min(36, maxRadius * 0.12))}px sans-serif`;
             ctx.fillStyle = '#111827';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
-            ctx.fillText(animatedDisplayVal, cx, cy + maxRadius * 0.12);
+            ctx.fillText(animatedDisplayVal, cx, cy + maxRadius * 0.08);
         }
 
         ctx.restore();

@@ -271,13 +271,16 @@
         <!-- HEATMAP CHART -->
         <div class="card full-width">
             <h2>Heatmap <span class="badge badge-heatmap">HEATMAP</span> <span class="badge badge-new">NEW</span></h2>
-            <p>Weekly activity — hours vs days intensity grid</p>
+            <p>Baby temperature monitoring — hourly over 1 week (°C)</p>
             <div id="chart-heatmap" class="chart-container"></div>
             <pre><code>czChart.create('#chart-heatmap', {
   type: 'heatmap',
   data: [...],
   x: 'hour',
-  y: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+  y: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+  heatmap: {
+    colorScale: ['#3b82f6','#06b6d4','#10b981','#f59e0b','#ef4444']
+  }
 });</code></pre>
         </div>
 
@@ -576,20 +579,21 @@
     czChart.create('#chart-heatmap', {
         type: 'heatmap',
         data: [
-            { hour: '9am',  Mon: 2, Tue: 5, Wed: 8, Thu: 4, Fri: 3 },
-            { hour: '10am', Mon: 5, Tue: 8, Wed: 12, Thu: 7, Fri: 6 },
-            { hour: '11am', Mon: 8, Tue: 12, Wed: 15, Thu: 10, Fri: 9 },
-            { hour: '12pm', Mon: 4, Tue: 6, Wed: 8, Thu: 5, Fri: 3 },
-            { hour: '1pm',  Mon: 3, Tue: 4, Wed: 6, Thu: 4, Fri: 2 },
-            { hour: '2pm',  Mon: 7, Tue: 10, Wed: 14, Thu: 9, Fri: 8 },
-            { hour: '3pm',  Mon: 9, Tue: 13, Wed: 16, Thu: 11, Fri: 10 },
-            { hour: '4pm',  Mon: 6, Tue: 9, Wed: 11, Thu: 8, Fri: 5 },
-            { hour: '5pm',  Mon: 3, Tue: 5, Wed: 7, Thu: 4, Fri: 2 }
+            { hour: '00:00', Mon: 36.4, Tue: 36.3, Wed: 36.5, Thu: 36.2, Fri: 36.6, Sat: 36.3, Sun: 36.4 },
+            { hour: '03:00', Mon: 36.2, Tue: 36.1, Wed: 36.3, Thu: 36.0, Fri: 36.4, Sat: 36.1, Sun: 36.2 },
+            { hour: '06:00', Mon: 36.5, Tue: 36.6, Wed: 36.8, Thu: 36.4, Fri: 37.0, Sat: 36.5, Sun: 36.3 },
+            { hour: '09:00', Mon: 36.8, Tue: 37.0, Wed: 37.4, Thu: 36.7, Fri: 37.8, Sat: 36.9, Sun: 36.6 },
+            { hour: '12:00', Mon: 37.0, Tue: 37.2, Wed: 38.1, Thu: 36.9, Fri: 38.5, Sat: 37.0, Sun: 36.8 },
+            { hour: '15:00', Mon: 37.1, Tue: 37.4, Wed: 38.6, Thu: 37.0, Fri: 39.0, Sat: 37.2, Sun: 36.9 },
+            { hour: '18:00', Mon: 37.0, Tue: 37.1, Wed: 38.2, Thu: 36.8, Fri: 38.3, Sat: 37.0, Sun: 36.7 },
+            { hour: '21:00', Mon: 36.7, Tue: 36.8, Wed: 37.5, Thu: 36.5, Fri: 37.6, Sat: 36.7, Sun: 36.5 }
         ],
         x: 'hour',
-        y: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+        y: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+        xAxis: { title: 'Time' },
+        yAxis: { title: 'Day' },
         heatmap: {
-            colorScale: ['#f0fdf4', '#10b981'],
+            colorScale: ['#3b82f6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444'],
             showValues: true
         }
     });
