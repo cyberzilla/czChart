@@ -741,7 +741,7 @@
       this.pluginManager.hook('beforeDraw', ctx);
 
       // Draw background (theme)
-      if (this._theme && this._theme.background) {
+      if (this._theme && this._theme.background && this.type !== 'treemap') {
         ctx.save();
         ctx.fillStyle = this._theme.background;
         ctx.fillRect(0, 0, this._width, this._height);
@@ -804,7 +804,7 @@
           // Redraw from grid on each frame
           this.renderer.clearMain();
 
-          if (this._theme && this._theme.background) {
+          if (this._theme && this._theme.background && this.type !== 'treemap') {
             ctx.save();
             ctx.fillStyle = this._theme.background;
             ctx.fillRect(0, 0, this._width, this._height);

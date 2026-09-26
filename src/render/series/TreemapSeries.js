@@ -76,38 +76,23 @@ class TreemapSeries {
         // Sort values descending for squarified layout
         items.sort((a, b) => b.value - a.value);
 
-        // Compute squarified treemap layout
+        // Compute squarified treemap layout — edge-to-edge
         this._rects = [];
+        const fullW = parseFloat(ctx.canvas.style.width) || plotArea.width;
+        const fullH = parseFloat(ctx.canvas.style.height) || plotArea.height;
         this._squarify(items, [], {
-            x: plotArea.left,
-            y: plotArea.top,
-            w: plotArea.width,
-            h: plotArea.height
+            x: 0,
+            y: 0,
+            w: fullW,
+            h: fullH
         }, total);
 
-        const R = 12;
-        const x0 = plotArea.left;
-        const y0 = plotArea.top;
-        const w0 = plotArea.width;
-        const h0 = plotArea.height;
+        const R = 8;
+        const T = 2; // tolerance for edge detection
 
         ctx.save();
 
-        // Clip with smooth rounded rect
-        ctx.beginPath();
-        ctx.moveTo(x0 + R, y0);
-        ctx.lineTo(x0 + w0 - R, y0);
-        ctx.quadraticCurveTo(x0 + w0, y0, x0 + w0, y0 + R);
-        ctx.lineTo(x0 + w0, y0 + h0 - R);
-        ctx.quadraticCurveTo(x0 + w0, y0 + h0, x0 + w0 - R, y0 + h0);
-        ctx.lineTo(x0 + R, y0 + h0);
-        ctx.quadraticCurveTo(x0, y0 + h0, x0, y0 + h0 - R);
-        ctx.lineTo(x0, y0 + R);
-        ctx.quadraticCurveTo(x0, y0, x0 + R, y0);
-        ctx.closePath();
-        ctx.clip();
-
-        // Draw rects inside clipped area
+        // Draw rects — corner rects get per-corner border-radius
         for (let i = 0; i < this._rects.length; i++) {
             const rect = this._rects[i];
             const gap = 1;
@@ -132,7 +117,45 @@ class TreemapSeries {
 
             ctx.globalAlpha = alpha;
             ctx.fillStyle = rect.color;
-            ctx.fillRect(currentX, currentY, animW, animH);
+
+            // Detect which edges this rect touches
+            const atLeft = rect.x <= T;
+            const atRight = (rect.x + rect.w) >= fullW - T;
+            const atTop = rect.y <= T;
+            const atBottom = (rect.y + rect.h) >= fullH - T;
+
+            // Per-corner radii: [top-left, top-right, bottom-right, bottom-left]
+            const tl = (atTop && atLeft) ? R : 0;
+            const tr = (atTop && atRight) ? R : 0;
+            const br = (atBottom && atRight) ? R : 0;
+            const bl = (atBottom && atLeft) ? R : 0;
+
+            if (tl || tr || br || bl) {
+                ctx.beginPath();
+                if (ctx.roundRect) {
+                    ctx.roundRect(currentX, currentY, animW, animH, [tl, tr, br, bl]);
+                } else {
+                    // Fallback: manual per-corner arcs
+                    const x = currentX, y = currentY, w = animW, h = animH;
+                    ctx.moveTo(x + tl, y);
+                    ctx.lineTo(x + w - tr, y);
+                    if (tr) ctx.arc(x + w - tr, y + tr, tr, -Math.PI/2, 0);
+                    else ctx.lineTo(x + w, y);
+                    ctx.lineTo(x + w, y + h - br);
+                    if (br) ctx.arc(x + w - br, y + h - br, br, 0, Math.PI/2);
+                    else ctx.lineTo(x + w, y + h);
+                    ctx.lineTo(x + bl, y + h);
+                    if (bl) ctx.arc(x + bl, y + h - bl, bl, Math.PI/2, Math.PI);
+                    else ctx.lineTo(x, y + h);
+                    ctx.lineTo(x, y + tl);
+                    if (tl) ctx.arc(x + tl, y + tl, tl, Math.PI, Math.PI*1.5);
+                    else ctx.lineTo(x, y);
+                    ctx.closePath();
+                }
+                ctx.fill();
+            } else {
+                ctx.fillRect(currentX, currentY, animW, animH);
+            }
 
             if (animW >= 40 && animH >= 20) {
                 ctx.fillStyle = '#ffffff';
