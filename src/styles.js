@@ -23,6 +23,8 @@ window.CZ.Styles = {
 .cz-tooltip-arrow { position: absolute; width: 10px; height: 10px; background: #111827; transform: rotate(45deg); }
 .cz-tooltip-arrow-left { left: -5px; top: 50%; margin-top: -5px; }
 .cz-tooltip-arrow-right { right: -5px; top: 50%; margin-top: -5px; }
+.cz-tooltip-arrow-bottom { bottom: -5px; left: 50%; margin-left: -5px; }
+.cz-tooltip-arrow-top { top: -5px; left: 50%; margin-left: -5px; }
 .cz-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 16px; padding: 8px 4px; font-size: 12px; line-height: 1; }
 .cz-legend-item { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: opacity 0.2s; text-decoration: none; padding: 2px 0; }
 .cz-legend-item:hover { opacity: 0.75; }

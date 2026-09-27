@@ -48,7 +48,8 @@ const DEFAULTS = {
     },
     tooltip: {
         enabled: true,
-        shared: true  // show all series values
+        shared: true,  // show all series values
+        align: 'auto'  // auto, right, left, top, bottom
     },
     legend: {
         show: true,

@@ -25,6 +25,10 @@
             this.element.style.zIndex = '99999';
             this.element.style.transition = 'opacity 0.15s ease-out';
             document.body.appendChild(this.element);
+
+            // Hide tooltip immediately on scroll
+            this._onScroll = () => { this.hide(); };
+            window.addEventListener('scroll', this._onScroll, { passive: true, capture: true });
         }
 
         /**
@@ -76,36 +80,45 @@
             const vw = window.innerWidth;
             const vh = window.innerHeight;
 
-            // Position with offset (gap for arrow)
-            const offset = 12;
-            let left = absX + offset;
-            let top = absY - th / 2;  // vertically center on cursor
-            let flippedX = false;
+            const gap = 12;
+            const margin = 8;
+            let left, top, arrowClass;
+            const align = this.options.align || 'auto';
 
-            // Collision: right edge → flip to left side
-            if (left + tw > vw - 8) {
-                left = absX - tw - offset;
-                flippedX = true;
+            const placeRight  = () => { left = absX + gap; top = absY - th / 2; arrowClass = 'cz-tooltip-arrow-left'; };
+            const placeLeft   = () => { left = absX - tw - gap; top = absY - th / 2; arrowClass = 'cz-tooltip-arrow-right'; };
+            const placeTop    = () => { left = absX - tw / 2; top = absY - th - gap; arrowClass = 'cz-tooltip-arrow-bottom'; };
+            const placeBottom = () => { left = absX - tw / 2; top = absY + gap; arrowClass = 'cz-tooltip-arrow-top'; };
+
+            if (align === 'right')       { placeRight(); }
+            else if (align === 'left')   { placeLeft(); }
+            else if (align === 'top')    { placeTop(); }
+            else if (align === 'bottom') { placeBottom(); }
+            else {
+                // Auto: pick best direction based on available space
+                const spaceRight = vw - absX - gap;
+                const spaceLeft = absX - gap;
+                const spaceTop = absY - gap;
+                const spaceBottom = vh - absY - gap;
+
+                if (spaceRight >= tw + margin) { placeRight(); }
+                else if (spaceLeft >= tw + margin) { placeLeft(); }
+                else if (spaceTop >= th + margin) { placeTop(); }
+                else { placeBottom(); }
             }
-            // Collision: left edge
-            if (left < 8) {
-                left = 8;
-            }
-            // Collision: bottom
-            if (top + th > vh - 8) {
-                top = vh - th - 8;
-            }
-            // Collision: top
-            if (top < 8) {
-                top = 8;
-            }
+
+            // Clamp to viewport edges
+            if (left + tw > vw - margin) left = vw - tw - margin;
+            if (left < margin) left = margin;
+            if (top + th > vh - margin) top = vh - th - margin;
+            if (top < margin) top = margin;
 
             this.element.style.transform = 'translate3d(' + left + 'px, ' + top + 'px, 0)';
 
             // Update arrow direction
             const arrow = this.element.querySelector('.cz-tooltip-arrow');
             if (arrow) {
-                arrow.className = 'cz-tooltip-arrow ' + (flippedX ? 'cz-tooltip-arrow-right' : 'cz-tooltip-arrow-left');
+                arrow.className = 'cz-tooltip-arrow ' + arrowClass;
             }
         }
 
@@ -114,6 +127,7 @@
         }
 
         destroy() {
+            window.removeEventListener('scroll', this._onScroll, { capture: true });
             if (this.element && this.element.parentNode) {
                 this.element.parentNode.removeChild(this.element);
             }

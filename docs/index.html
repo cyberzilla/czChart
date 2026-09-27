@@ -123,13 +123,14 @@
         <!-- BAR CHART -->
         <div class="card">
             <h2>Bar Chart <span class="badge badge-bar">BAR</span></h2>
-            <p>Quarterly sales by region — grouped bars</p>
+            <p>Quarterly sales by region — tooltip aligned <code>top</code></p>
             <div id="chart-bar" class="chart-container"></div>
             <pre><code>czChart.create('#chart-bar', {
   type: 'bar',
   data: [...],
   x: 'quarter',
-  y: ['north', 'south', 'east']
+  y: ['north', 'south', 'east'],
+  tooltip: { align: 'top' } // right, left, top, bottom, auto
 });</code></pre>
         </div>
 
@@ -454,7 +455,8 @@ czChart.create('#chart-mixed2', {
             { quarter: 'Q4', north: 510, south: 400, east: 340 }
         ],
         x: 'quarter',
-        y: ['north', 'south', 'east']
+        y: ['north', 'south', 'east'],
+        tooltip: { align: 'top' }
     });
 
     // =========================================================
