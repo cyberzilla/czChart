@@ -14,12 +14,15 @@ window.CZ.Styles = {
         const css = `
 .cz-chart-container { position: relative; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden; user-select: none; }
 .cz-tooltip { position: absolute; pointer-events: none; opacity: 0; transition: opacity 0.15s ease-out, transform 0.1s ease-out; z-index: 100; will-change: transform; top: 0; left: 0; }
-.cz-tooltip-content { background: rgba(17,24,39,0.95); color: #fff; border-radius: 8px; padding: 10px 14px; font-size: 12px; line-height: 1.5; box-shadow: 0 4px 12px rgba(0,0,0,0.25); white-space: nowrap; }
-.cz-tooltip-title { color: #9ca3af; margin-bottom: 4px; font-size: 11px; }
-.cz-tooltip-row { display: flex; align-items: center; gap: 8px; }
-.cz-tooltip-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.cz-tooltip-content { background: rgba(17,24,39,0.95); color: #fff; border-radius: 6px; padding: 6px 10px; font-size: 12px; line-height: 1.4; box-shadow: 0 4px 12px rgba(0,0,0,0.25); white-space: nowrap; position: relative; }
+.cz-tooltip-title { color: #9ca3af; margin-bottom: 4px; font-size: 11px; font-weight: 600; }
+.cz-tooltip-row { display: flex; align-items: center; gap: 6px; }
+.cz-tooltip-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
 .cz-tooltip-label { color: #d1d5db; }
 .cz-tooltip-value { font-weight: 600; color: #fff; margin-left: auto; }
+.cz-tooltip-arrow { position: absolute; width: 0; height: 0; border: 6px solid transparent; }
+.cz-tooltip-arrow-left { border-right-color: rgba(17,24,39,0.95); left: -11px; top: 50%; transform: translateY(-50%); }
+.cz-tooltip-arrow-right { border-left-color: rgba(17,24,39,0.95); right: -11px; top: 50%; transform: translateY(-50%); }
 .cz-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 16px; padding: 8px 4px; font-size: 12px; line-height: 1; }
 .cz-legend-item { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: opacity 0.2s; text-decoration: none; padding: 2px 0; }
 .cz-legend-item:hover { opacity: 0.75; }

@@ -3,9 +3,26 @@
 window.CZ = window.CZ || {};
 
 const DEFAULT_PALETTE = [
-    '#3b82f6', '#ef4444', '#10b981', '#f59e0b', 
-    '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', 
-    '#f97316', '#6366f1', '#14b8a6', '#e11d48'
+    '#3b82f6', // 1. blue        (hue ~217°)
+    '#ef4444', // 2. red          (hue ~0°)
+    '#22c55e', // 3. green        (hue ~142°)
+    '#f59e0b', // 4. amber        (hue ~38°)
+    '#8b5cf6', // 5. violet       (hue ~258°)
+    '#06b6d4', // 6. cyan         (hue ~189°)
+    '#f97316', // 7. orange       (hue ~25°)
+    '#14b8a6', // 8. teal         (hue ~174°)
+    '#e11d48', // 9. rose         (hue ~347°)
+    '#84cc16', // 10. lime        (hue ~84°)
+    '#6366f1', // 11. indigo      (hue ~239°)
+    '#ec4899', // 12. pink        (hue ~330°)
+    '#eab308', // 13. yellow      (hue ~48°)
+    '#0ea5e9', // 14. sky         (hue ~199°)
+    '#d946ef', // 15. fuchsia     (hue ~292°)
+    '#fb923c', // 16. light-orange(hue ~27°)
+    '#2dd4bf', // 17. mint        (hue ~170°)
+    '#a855f7', // 18. purple      (hue ~270°)
+    '#64748b', // 19. slate       (hue ~215°)
+    '#facc15', // 20. gold        (hue ~50°)
 ];
 
 window.CZ.Color = {
@@ -116,10 +133,19 @@ window.CZ.Color = {
     },
 
     /**
-     * Get a series color from default palette
+     * Get a series color from default palette.
+     * When palette is exhausted, generates colors using golden angle
+     * to maximize visual distinction between adjacent series.
      */
     getSeriesColor(index) {
-        return DEFAULT_PALETTE[index % DEFAULT_PALETTE.length];
+        if (index < DEFAULT_PALETTE.length) {
+            return DEFAULT_PALETTE[index];
+        }
+        // Golden angle (~137.5°) distributes hues maximally
+        const hue = (index * 137.508) % 360;
+        const sat = 65 + (index % 3) * 10;   // 65-85% saturation
+        const lit = 50 + (index % 2) * 10;    // 50-60% lightness
+        return 'hsl(' + Math.round(hue) + ',' + sat + '%,' + lit + '%)';
     },
 
     /**
@@ -162,13 +188,26 @@ window.CZ.Color = {
     },
 
     /**
-     * Resolve color value — converts 'random' to actual color
+     * Resolve color value — converts 'random' to a distinct color.
+     * When index is provided, uses golden angle spacing from a random
+     * starting hue (seeded once per page load) for max distinction.
      * @param {string} color
-     * @param {number} [alpha] - Optional alpha for random colors
+     * @param {number} [index] - Index for distinct color generation
+     * @param {number} [alpha] - Optional alpha
      * @returns {string} resolved color
      */
-    resolve(color, alpha) {
+    resolve(color, index, alpha) {
         if (typeof color === 'string' && color.toLowerCase() === 'random') {
+            if (typeof index === 'number') {
+                // Random start (fixed per session) + golden angle spacing
+                if (!window.CZ.Color._randomHueOffset) {
+                    window.CZ.Color._randomHueOffset = Math.floor(Math.random() * 360);
+                }
+                const hue = (window.CZ.Color._randomHueOffset + index * 137.508) % 360;
+                const sat = 65 + (index % 3) * 10;
+                const lit = 48 + (index % 3) * 7;
+                return 'hsl(' + Math.round(hue) + ',' + sat + '%,' + lit + '%)';
+            }
             return window.CZ.Color.randomColor(alpha);
         }
         return color;

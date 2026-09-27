@@ -594,11 +594,15 @@
         if (!isFinite(maxX) || maxX <= 0) maxX = 100;
         if (this.options.xAxis.beginAtZero !== false) minX = Math.min(0, minX);
 
+        const xAbbr = this.options.numberAbbr || {};
         const xFormat = this.options.xAxis.format || (val => {
-          if (Math.abs(val) >= 1000000) return (val / 1000000).toFixed(1) + 'M';
-          if (Math.abs(val) >= 1000) return (val / 1000).toFixed(1) + 'K';
-          if (Number.isInteger(val)) return val.toString();
-          return val.toFixed(1);
+          const abs = Math.abs(val);
+          if (abs >= 1000000000000) { const v = val / 1000000000000; return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + (xAbbr.trillions || 'T'); }
+          if (abs >= 1000000000) { const v = val / 1000000000; return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + (xAbbr.billions || 'B'); }
+          if (abs >= 1000000) { const v = val / 1000000; return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + (xAbbr.millions || 'M'); }
+          if (abs >= 1000) { const v = val / 1000; return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + (xAbbr.thousands || 'K'); }
+          if (Number.isInteger(val)) return val.toLocaleString();
+          return val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 });
         });
 
         this.scales.x = new CZ.LinearScale({
@@ -675,11 +679,15 @@
 
       if (!isFinite(minY)) { minY = 0; maxY = 100; }
 
+      const abbr = this.options.numberAbbr || {};
       const yFormat = this.options.yAxis.format || (val => {
-        if (Math.abs(val) >= 1000000) return (val / 1000000).toFixed(1) + 'M';
-        if (Math.abs(val) >= 1000) return (val / 1000).toFixed(1) + 'K';
-        if (Number.isInteger(val)) return val.toString();
-        return val.toFixed(1);
+        const abs = Math.abs(val);
+        if (abs >= 1000000000000) { const v = val / 1000000000000; return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + (abbr.trillions || 'T'); }
+        if (abs >= 1000000000) { const v = val / 1000000000; return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + (abbr.billions || 'B'); }
+        if (abs >= 1000000) { const v = val / 1000000; return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + (abbr.millions || 'M'); }
+        if (abs >= 1000) { const v = val / 1000; return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + (abbr.thousands || 'K'); }
+        if (Number.isInteger(val)) return val.toLocaleString();
+        return val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 });
       });
 
       this.scales.y = new CZ.LinearScale({
@@ -774,6 +782,10 @@
       // Clear canvas
       this.renderer.clearMain();
       this.renderer.clearOverlay();
+
+      // Enable high-quality rendering for crisp text and lines
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
 
       this.pluginManager.hook('beforeDraw', ctx);
 

@@ -15,7 +15,7 @@
       ctx.save();
       const ticks = scale.getTicks();
       const labelColor = options.labelColor || '#6b7280';
-      const labelFont = options.labelFont || '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      const labelFont = options.labelFont || '11px "Lucida Grande", "Lucida Sans Unicode", "Helvetica Neue", Helvetica, Arial, sans-serif';
       const rotation = options.rotation || 0;
 
       ctx.fillStyle = labelColor;
@@ -50,7 +50,7 @@
       // Draw X-axis title if provided
       if (options.title) {
         ctx.fillStyle = options.titleColor || '#6b7280';
-        ctx.font = options.titleFont || '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.font = options.titleFont || '600 12px "Lucida Grande", "Lucida Sans Unicode", "Helvetica Neue", Helvetica, Arial, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         ctx.fillText(
@@ -72,7 +72,7 @@
       ctx.save();
       const ticks = scale.getTicks();
       const labelColor = options.labelColor || '#6b7280';
-      const labelFont = options.labelFont || '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      const labelFont = options.labelFont || '11px "Lucida Grande", "Lucida Sans Unicode", "Helvetica Neue", Helvetica, Arial, sans-serif';
 
       ctx.fillStyle = labelColor;
       ctx.font = labelFont;
@@ -90,7 +90,7 @@
       if (options.title) {
         ctx.save();
         ctx.fillStyle = options.titleColor || '#6b7280';
-        ctx.font = options.titleFont || '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.font = options.titleFont || '600 12px "Lucida Grande", "Lucida Sans Unicode", "Helvetica Neue", Helvetica, Arial, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
 
@@ -110,7 +110,7 @@
      */
     measureYAxisWidth(ctx, scale, options = {}) {
       ctx.save();
-      ctx.font = options.labelFont || '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.font = options.labelFont || '11px "Lucida Grande", "Lucida Sans Unicode", "Helvetica Neue", Helvetica, Arial, sans-serif';
       const ticks = scale.getTicks();
       let maxWidth = 0;
       ticks.forEach(tick => {
@@ -140,7 +140,7 @@
       }
 
       ctx.save();
-      ctx.font = options.labelFont || '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.font = options.labelFont || '11px "Lucida Grande", "Lucida Sans Unicode", "Helvetica Neue", Helvetica, Arial, sans-serif';
       const ticks = scale.getTicks();
       let maxWidth = 0;
       ticks.forEach(tick => {

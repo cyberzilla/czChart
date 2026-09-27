@@ -41,6 +41,7 @@
                 this.element.innerHTML = this.options.formatter(hitData);
             } else {
                 let html = '<div class="cz-tooltip-content">';
+                html += '<div class="cz-tooltip-arrow"></div>';
                 if (hitData.label) {
                     html += '<div class="cz-tooltip-title">' + hitData.label + '</div>';
                 }
@@ -75,13 +76,16 @@
             const vw = window.innerWidth;
             const vh = window.innerHeight;
 
-            // Position with offset
-            let left = absX + 15;
-            let top = absY - 10;
+            // Position with offset (gap for arrow)
+            const offset = 12;
+            let left = absX + offset;
+            let top = absY - th / 2;  // vertically center on cursor
+            let flippedX = false;
 
-            // Collision: right edge
+            // Collision: right edge → flip to left side
             if (left + tw > vw - 8) {
-                left = absX - tw - 15;
+                left = absX - tw - offset;
+                flippedX = true;
             }
             // Collision: left edge
             if (left < 8) {
@@ -89,7 +93,7 @@
             }
             // Collision: bottom
             if (top + th > vh - 8) {
-                top = absY - th - 10;
+                top = vh - th - 8;
             }
             // Collision: top
             if (top < 8) {
@@ -97,6 +101,12 @@
             }
 
             this.element.style.transform = 'translate3d(' + left + 'px, ' + top + 'px, 0)';
+
+            // Update arrow direction
+            const arrow = this.element.querySelector('.cz-tooltip-arrow');
+            if (arrow) {
+                arrow.className = 'cz-tooltip-arrow ' + (flippedX ? 'cz-tooltip-arrow-right' : 'cz-tooltip-arrow-left');
+            }
         }
 
         hide() {

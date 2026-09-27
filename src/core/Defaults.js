@@ -6,6 +6,12 @@ const DEFAULTS = {
     responsive: true,
     maintainAspectRatio: false,
     padding: { top: 20, right: 20, bottom: 20, left: 20 },
+    numberAbbr: {
+        thousands: 'K',      // Indonesian: 'rb'
+        millions: 'M',       // Indonesian: 'jt'
+        billions: 'B',       // Indonesian: 'M' (miliar)
+        trillions: 'T'       // Indonesian: 'T' (triliun)
+    },
     animation: {
         enabled: true,
         duration: 500,
@@ -17,8 +23,10 @@ const DEFAULTS = {
         gridColor: 'rgba(0,0,0,0.05)',
         lineColor: '#d1d5db',
         tickColor: '#6b7280',
-        labelFont: '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        labelFont: '11px "Lucida Grande", "Lucida Sans Unicode", "Helvetica Neue", Helvetica, Arial, sans-serif',
         labelColor: '#6b7280',
+        titleFont: '600 12px "Lucida Grande", "Lucida Sans Unicode", "Helvetica Neue", Helvetica, Arial, sans-serif',
+        titleColor: '#374151',
         maxTicks: 0,
         rotation: 0,
         title: null      // e.g. 'Bulan'
@@ -29,8 +37,10 @@ const DEFAULTS = {
         gridColor: 'rgba(0,0,0,0.08)',
         lineColor: '#d1d5db',
         tickColor: '#6b7280',
-        labelFont: '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        labelFont: '11px "Lucida Grande", "Lucida Sans Unicode", "Helvetica Neue", Helvetica, Arial, sans-serif',
         labelColor: '#6b7280',
+        titleFont: '600 12px "Lucida Grande", "Lucida Sans Unicode", "Helvetica Neue", Helvetica, Arial, sans-serif',
+        titleColor: '#374151',
         maxTicks: 6,
         beginAtZero: true,
         format: null,

@@ -2,7 +2,7 @@
  * czChart v1.0.0 — Lightweight, Data-Driven Chart Library
  * (c) 2026 CyberZilla
  * Released under the MIT License
- * Built: 2026-09-27T06:52:17.734Z
+ * Built: 2026-09-27T10:01:12.659Z
  */
 
 (function(global) {
@@ -188,9 +188,26 @@ window.CZ.MathUtils = window.CZ.Math;
 window.CZ = window.CZ || {};
 
 const DEFAULT_PALETTE = [
-    '#3b82f6', '#ef4444', '#10b981', '#f59e0b', 
-    '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', 
-    '#f97316', '#6366f1', '#14b8a6', '#e11d48'
+    '#3b82f6', // 1. blue        (hue ~217°)
+    '#ef4444', // 2. red          (hue ~0°)
+    '#22c55e', // 3. green        (hue ~142°)
+    '#f59e0b', // 4. amber        (hue ~38°)
+    '#8b5cf6', // 5. violet       (hue ~258°)
+    '#06b6d4', // 6. cyan         (hue ~189°)
+    '#f97316', // 7. orange       (hue ~25°)
+    '#14b8a6', // 8. teal         (hue ~174°)
+    '#e11d48', // 9. rose         (hue ~347°)
+    '#84cc16', // 10. lime        (hue ~84°)
+    '#6366f1', // 11. indigo      (hue ~239°)
+    '#ec4899', // 12. pink        (hue ~330°)
+    '#eab308', // 13. yellow      (hue ~48°)
+    '#0ea5e9', // 14. sky         (hue ~199°)
+    '#d946ef', // 15. fuchsia     (hue ~292°)
+    '#fb923c', // 16. light-orange(hue ~27°)
+    '#2dd4bf', // 17. mint        (hue ~170°)
+    '#a855f7', // 18. purple      (hue ~270°)
+    '#64748b', // 19. slate       (hue ~215°)
+    '#facc15', // 20. gold        (hue ~50°)
 ];
 
 window.CZ.Color = {
@@ -301,10 +318,19 @@ window.CZ.Color = {
     },
 
     /**
-     * Get a series color from default palette
+     * Get a series color from default palette.
+     * When palette is exhausted, generates colors using golden angle
+     * to maximize visual distinction between adjacent series.
      */
     getSeriesColor(index) {
-        return DEFAULT_PALETTE[index % DEFAULT_PALETTE.length];
+        if (index < DEFAULT_PALETTE.length) {
+            return DEFAULT_PALETTE[index];
+        }
+        // Golden angle (~137.5°) distributes hues maximally
+        const hue = (index * 137.508) % 360;
+        const sat = 65 + (index % 3) * 10;   // 65-85% saturation
+        const lit = 50 + (index % 2) * 10;    // 50-60% lightness
+        return 'hsl(' + Math.round(hue) + ',' + sat + '%,' + lit + '%)';
     },
 
     /**
@@ -347,13 +373,26 @@ window.CZ.Color = {
     },
 
     /**
-     * Resolve color value — converts 'random' to actual color
+     * Resolve color value — converts 'random' to a distinct color.
+     * When index is provided, uses golden angle spacing from a random
+     * starting hue (seeded once per page load) for max distinction.
      * @param {string} color
-     * @param {number} [alpha] - Optional alpha for random colors
+     * @param {number} [index] - Index for distinct color generation
+     * @param {number} [alpha] - Optional alpha
      * @returns {string} resolved color
      */
-    resolve(color, alpha) {
+    resolve(color, index, alpha) {
         if (typeof color === 'string' && color.toLowerCase() === 'random') {
+            if (typeof index === 'number') {
+                // Random start (fixed per session) + golden angle spacing
+                if (!window.CZ.Color._randomHueOffset) {
+                    window.CZ.Color._randomHueOffset = Math.floor(Math.random() * 360);
+                }
+                const hue = (window.CZ.Color._randomHueOffset + index * 137.508) % 360;
+                const sat = 65 + (index % 3) * 10;
+                const lit = 48 + (index % 3) * 7;
+                return 'hsl(' + Math.round(hue) + ',' + sat + '%,' + lit + '%)';
+            }
             return window.CZ.Color.randomColor(alpha);
         }
         return color;
@@ -457,12 +496,15 @@ window.CZ.Styles = {
         const css = `
 .cz-chart-container { position: relative; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden; user-select: none; }
 .cz-tooltip { position: absolute; pointer-events: none; opacity: 0; transition: opacity 0.15s ease-out, transform 0.1s ease-out; z-index: 100; will-change: transform; top: 0; left: 0; }
-.cz-tooltip-content { background: rgba(17,24,39,0.95); color: #fff; border-radius: 8px; padding: 10px 14px; font-size: 12px; line-height: 1.5; box-shadow: 0 4px 12px rgba(0,0,0,0.25); white-space: nowrap; }
-.cz-tooltip-title { color: #9ca3af; margin-bottom: 4px; font-size: 11px; }
-.cz-tooltip-row { display: flex; align-items: center; gap: 8px; }
-.cz-tooltip-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.cz-tooltip-content { background: rgba(17,24,39,0.95); color: #fff; border-radius: 6px; padding: 6px 10px; font-size: 12px; line-height: 1.4; box-shadow: 0 4px 12px rgba(0,0,0,0.25); white-space: nowrap; position: relative; }
+.cz-tooltip-title { color: #9ca3af; margin-bottom: 4px; font-size: 11px; font-weight: 600; }
+.cz-tooltip-row { display: flex; align-items: center; gap: 6px; }
+.cz-tooltip-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
 .cz-tooltip-label { color: #d1d5db; }
 .cz-tooltip-value { font-weight: 600; color: #fff; margin-left: auto; }
+.cz-tooltip-arrow { position: absolute; width: 0; height: 0; border: 6px solid transparent; }
+.cz-tooltip-arrow-left { border-right-color: rgba(17,24,39,0.95); left: -11px; top: 50%; transform: translateY(-50%); }
+.cz-tooltip-arrow-right { border-left-color: rgba(17,24,39,0.95); right: -11px; top: 50%; transform: translateY(-50%); }
 .cz-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 16px; padding: 8px 4px; font-size: 12px; line-height: 1; }
 .cz-legend-item { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: opacity 0.2s; text-decoration: none; padding: 2px 0; }
 .cz-legend-item:hover { opacity: 0.75; }
@@ -573,6 +615,12 @@ const DEFAULTS = {
     responsive: true,
     maintainAspectRatio: false,
     padding: { top: 20, right: 20, bottom: 20, left: 20 },
+    numberAbbr: {
+        thousands: 'K',      // Indonesian: 'rb'
+        millions: 'M',       // Indonesian: 'jt'
+        billions: 'B',       // Indonesian: 'M' (miliar)
+        trillions: 'T'       // Indonesian: 'T' (triliun)
+    },
     animation: {
         enabled: true,
         duration: 500,
@@ -584,8 +632,10 @@ const DEFAULTS = {
         gridColor: 'rgba(0,0,0,0.05)',
         lineColor: '#d1d5db',
         tickColor: '#6b7280',
-        labelFont: '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        labelFont: '11px "Lucida Grande", "Lucida Sans Unicode", "Helvetica Neue", Helvetica, Arial, sans-serif',
         labelColor: '#6b7280',
+        titleFont: '600 12px "Lucida Grande", "Lucida Sans Unicode", "Helvetica Neue", Helvetica, Arial, sans-serif',
+        titleColor: '#374151',
         maxTicks: 0,
         rotation: 0,
         title: null      // e.g. 'Bulan'
@@ -596,8 +646,10 @@ const DEFAULTS = {
         gridColor: 'rgba(0,0,0,0.08)',
         lineColor: '#d1d5db',
         tickColor: '#6b7280',
-        labelFont: '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        labelFont: '11px "Lucida Grande", "Lucida Sans Unicode", "Helvetica Neue", Helvetica, Arial, sans-serif',
         labelColor: '#6b7280',
+        titleFont: '600 12px "Lucida Grande", "Lucida Sans Unicode", "Helvetica Neue", Helvetica, Arial, sans-serif',
+        titleColor: '#374151',
         maxTicks: 6,
         beginAtZero: true,
         format: null,
@@ -856,13 +908,13 @@ window.CZ.State = State;
             let color = (options.colors && options.colors[index]) || 
                           (CZ.ColorUtils ? CZ.ColorUtils.getSeriesColor(index) : '#000000');
             // Resolve 'random' keyword
-            if (CZ.ColorUtils && CZ.ColorUtils.resolve) color = CZ.ColorUtils.resolve(color);
+            if (CZ.ColorUtils && CZ.ColorUtils.resolve) color = CZ.ColorUtils.resolve(color, index);
             
             // Extract per-point colors from data if 'color' key exists
             const hasPointColors = data.some(d => d.color !== undefined);
-            const pointColors = hasPointColors ? data.map(d => {
+            const pointColors = hasPointColors ? data.map((d, pi) => {
               if (!d.color) return null;
-              return (CZ.ColorUtils && CZ.ColorUtils.resolve) ? CZ.ColorUtils.resolve(d.color) : d.color;
+              return (CZ.ColorUtils && CZ.ColorUtils.resolve) ? CZ.ColorUtils.resolve(d.color, pi) : d.color;
             }) : null;
 
             datasets.push({
@@ -1587,7 +1639,7 @@ window.CZ.State = State;
       ctx.save();
       const ticks = scale.getTicks();
       const labelColor = options.labelColor || '#6b7280';
-      const labelFont = options.labelFont || '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      const labelFont = options.labelFont || '11px "Lucida Grande", "Lucida Sans Unicode", "Helvetica Neue", Helvetica, Arial, sans-serif';
       const rotation = options.rotation || 0;
 
       ctx.fillStyle = labelColor;
@@ -1622,7 +1674,7 @@ window.CZ.State = State;
       // Draw X-axis title if provided
       if (options.title) {
         ctx.fillStyle = options.titleColor || '#6b7280';
-        ctx.font = options.titleFont || '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.font = options.titleFont || '600 12px "Lucida Grande", "Lucida Sans Unicode", "Helvetica Neue", Helvetica, Arial, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         ctx.fillText(
@@ -1644,7 +1696,7 @@ window.CZ.State = State;
       ctx.save();
       const ticks = scale.getTicks();
       const labelColor = options.labelColor || '#6b7280';
-      const labelFont = options.labelFont || '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      const labelFont = options.labelFont || '11px "Lucida Grande", "Lucida Sans Unicode", "Helvetica Neue", Helvetica, Arial, sans-serif';
 
       ctx.fillStyle = labelColor;
       ctx.font = labelFont;
@@ -1662,7 +1714,7 @@ window.CZ.State = State;
       if (options.title) {
         ctx.save();
         ctx.fillStyle = options.titleColor || '#6b7280';
-        ctx.font = options.titleFont || '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.font = options.titleFont || '600 12px "Lucida Grande", "Lucida Sans Unicode", "Helvetica Neue", Helvetica, Arial, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
 
@@ -1682,7 +1734,7 @@ window.CZ.State = State;
      */
     measureYAxisWidth(ctx, scale, options = {}) {
       ctx.save();
-      ctx.font = options.labelFont || '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.font = options.labelFont || '11px "Lucida Grande", "Lucida Sans Unicode", "Helvetica Neue", Helvetica, Arial, sans-serif';
       const ticks = scale.getTicks();
       let maxWidth = 0;
       ticks.forEach(tick => {
@@ -1712,7 +1764,7 @@ window.CZ.State = State;
       }
 
       ctx.save();
-      ctx.font = options.labelFont || '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.font = options.labelFont || '11px "Lucida Grande", "Lucida Sans Unicode", "Helvetica Neue", Helvetica, Arial, sans-serif';
       const ticks = scale.getTicks();
       let maxWidth = 0;
       ticks.forEach(tick => {
@@ -6387,6 +6439,7 @@ if (typeof window !== 'undefined') {
                 this.element.innerHTML = this.options.formatter(hitData);
             } else {
                 let html = '<div class="cz-tooltip-content">';
+                html += '<div class="cz-tooltip-arrow"></div>';
                 if (hitData.label) {
                     html += '<div class="cz-tooltip-title">' + hitData.label + '</div>';
                 }
@@ -6421,13 +6474,16 @@ if (typeof window !== 'undefined') {
             const vw = window.innerWidth;
             const vh = window.innerHeight;
 
-            // Position with offset
-            let left = absX + 15;
-            let top = absY - 10;
+            // Position with offset (gap for arrow)
+            const offset = 12;
+            let left = absX + offset;
+            let top = absY - th / 2;  // vertically center on cursor
+            let flippedX = false;
 
-            // Collision: right edge
+            // Collision: right edge → flip to left side
             if (left + tw > vw - 8) {
-                left = absX - tw - 15;
+                left = absX - tw - offset;
+                flippedX = true;
             }
             // Collision: left edge
             if (left < 8) {
@@ -6435,7 +6491,7 @@ if (typeof window !== 'undefined') {
             }
             // Collision: bottom
             if (top + th > vh - 8) {
-                top = absY - th - 10;
+                top = vh - th - 8;
             }
             // Collision: top
             if (top < 8) {
@@ -6443,6 +6499,12 @@ if (typeof window !== 'undefined') {
             }
 
             this.element.style.transform = 'translate3d(' + left + 'px, ' + top + 'px, 0)';
+
+            // Update arrow direction
+            const arrow = this.element.querySelector('.cz-tooltip-arrow');
+            if (arrow) {
+                arrow.className = 'cz-tooltip-arrow ' + (flippedX ? 'cz-tooltip-arrow-right' : 'cz-tooltip-arrow-left');
+            }
         }
 
         hide() {
@@ -7645,11 +7707,15 @@ if (typeof window !== 'undefined') {
         if (!isFinite(maxX) || maxX <= 0) maxX = 100;
         if (this.options.xAxis.beginAtZero !== false) minX = Math.min(0, minX);
 
+        const xAbbr = this.options.numberAbbr || {};
         const xFormat = this.options.xAxis.format || (val => {
-          if (Math.abs(val) >= 1000000) return (val / 1000000).toFixed(1) + 'M';
-          if (Math.abs(val) >= 1000) return (val / 1000).toFixed(1) + 'K';
-          if (Number.isInteger(val)) return val.toString();
-          return val.toFixed(1);
+          const abs = Math.abs(val);
+          if (abs >= 1000000000000) { const v = val / 1000000000000; return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + (xAbbr.trillions || 'T'); }
+          if (abs >= 1000000000) { const v = val / 1000000000; return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + (xAbbr.billions || 'B'); }
+          if (abs >= 1000000) { const v = val / 1000000; return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + (xAbbr.millions || 'M'); }
+          if (abs >= 1000) { const v = val / 1000; return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + (xAbbr.thousands || 'K'); }
+          if (Number.isInteger(val)) return val.toLocaleString();
+          return val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 });
         });
 
         this.scales.x = new CZ.LinearScale({
@@ -7726,11 +7792,15 @@ if (typeof window !== 'undefined') {
 
       if (!isFinite(minY)) { minY = 0; maxY = 100; }
 
+      const abbr = this.options.numberAbbr || {};
       const yFormat = this.options.yAxis.format || (val => {
-        if (Math.abs(val) >= 1000000) return (val / 1000000).toFixed(1) + 'M';
-        if (Math.abs(val) >= 1000) return (val / 1000).toFixed(1) + 'K';
-        if (Number.isInteger(val)) return val.toString();
-        return val.toFixed(1);
+        const abs = Math.abs(val);
+        if (abs >= 1000000000000) { const v = val / 1000000000000; return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + (abbr.trillions || 'T'); }
+        if (abs >= 1000000000) { const v = val / 1000000000; return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + (abbr.billions || 'B'); }
+        if (abs >= 1000000) { const v = val / 1000000; return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + (abbr.millions || 'M'); }
+        if (abs >= 1000) { const v = val / 1000; return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + (abbr.thousands || 'K'); }
+        if (Number.isInteger(val)) return val.toLocaleString();
+        return val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 });
       });
 
       this.scales.y = new CZ.LinearScale({
@@ -7825,6 +7895,10 @@ if (typeof window !== 'undefined') {
       // Clear canvas
       this.renderer.clearMain();
       this.renderer.clearOverlay();
+
+      // Enable high-quality rendering for crisp text and lines
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
 
       this.pluginManager.hook('beforeDraw', ctx);
 

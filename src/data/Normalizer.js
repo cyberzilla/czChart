@@ -53,13 +53,13 @@
             let color = (options.colors && options.colors[index]) || 
                           (CZ.ColorUtils ? CZ.ColorUtils.getSeriesColor(index) : '#000000');
             // Resolve 'random' keyword
-            if (CZ.ColorUtils && CZ.ColorUtils.resolve) color = CZ.ColorUtils.resolve(color);
+            if (CZ.ColorUtils && CZ.ColorUtils.resolve) color = CZ.ColorUtils.resolve(color, index);
             
             // Extract per-point colors from data if 'color' key exists
             const hasPointColors = data.some(d => d.color !== undefined);
-            const pointColors = hasPointColors ? data.map(d => {
+            const pointColors = hasPointColors ? data.map((d, pi) => {
               if (!d.color) return null;
-              return (CZ.ColorUtils && CZ.ColorUtils.resolve) ? CZ.ColorUtils.resolve(d.color) : d.color;
+              return (CZ.ColorUtils && CZ.ColorUtils.resolve) ? CZ.ColorUtils.resolve(d.color, pi) : d.color;
             }) : null;
 
             datasets.push({
