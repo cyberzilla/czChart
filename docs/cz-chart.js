@@ -2,7 +2,7 @@
  * czChart v1.0.0 — Lightweight, Data-Driven Chart Library
  * (c) 2026 CyberZilla
  * Released under the MIT License
- * Built: 2026-09-27T10:01:12.659Z
+ * Built: 2026-09-27T10:51:55.535Z
  */
 
 (function(global) {
@@ -496,15 +496,15 @@ window.CZ.Styles = {
         const css = `
 .cz-chart-container { position: relative; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden; user-select: none; }
 .cz-tooltip { position: absolute; pointer-events: none; opacity: 0; transition: opacity 0.15s ease-out, transform 0.1s ease-out; z-index: 100; will-change: transform; top: 0; left: 0; }
-.cz-tooltip-content { background: rgba(17,24,39,0.95); color: #fff; border-radius: 6px; padding: 6px 10px; font-size: 12px; line-height: 1.4; box-shadow: 0 4px 12px rgba(0,0,0,0.25); white-space: nowrap; position: relative; }
+.cz-tooltip-content { background: #111827; color: #fff; border-radius: 6px; padding: 6px 10px; font-size: 12px; line-height: 1.4; box-shadow: 0 4px 12px rgba(0,0,0,0.25); white-space: nowrap; position: relative; }
 .cz-tooltip-title { color: #9ca3af; margin-bottom: 4px; font-size: 11px; font-weight: 600; }
 .cz-tooltip-row { display: flex; align-items: center; gap: 6px; }
 .cz-tooltip-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
 .cz-tooltip-label { color: #d1d5db; }
 .cz-tooltip-value { font-weight: 600; color: #fff; margin-left: auto; }
-.cz-tooltip-arrow { position: absolute; width: 0; height: 0; border: 6px solid transparent; }
-.cz-tooltip-arrow-left { border-right-color: rgba(17,24,39,0.95); left: -11px; top: 50%; transform: translateY(-50%); }
-.cz-tooltip-arrow-right { border-left-color: rgba(17,24,39,0.95); right: -11px; top: 50%; transform: translateY(-50%); }
+.cz-tooltip-arrow { position: absolute; width: 10px; height: 10px; background: #111827; transform: rotate(45deg); }
+.cz-tooltip-arrow-left { left: -5px; top: 50%; margin-top: -5px; }
+.cz-tooltip-arrow-right { right: -5px; top: 50%; margin-top: -5px; }
 .cz-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 16px; padding: 8px 4px; font-size: 12px; line-height: 1; }
 .cz-legend-item { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: opacity 0.2s; text-decoration: none; padding: 2px 0; }
 .cz-legend-item:hover { opacity: 0.75; }
@@ -2128,20 +2128,33 @@ class LineSeries {
         ctx.lineCap = 'round';
         ctx.stroke(path);
 
-        ctx.restore(); // exit clip — line and fill are clipped, points are NOT
+        ctx.restore(); // exit clip — line and fill are clipped
         this._renderedPoints = points;
 
-        // Draw points OUTSIDE clip so edge points are not cut off
+        // Draw points — filter by animation progress so they follow the line
         if (this.options.pointRadius > 0) {
             ctx.save();
             const color = this.dataset.color || '#000';
             const bgColor = this._getBackgroundColor();
+            const animRight = plotArea.left + plotArea.width * progress;
 
-            // Normal points: small subtle dots (skip selected, drawn separately)
+            // Normal points: only draw if within animation progress
             points.forEach(p => {
                 if (this._selectedPoints.has(p.index)) return;
+                if (progress < 1 && p.x > animRight + 2) return; // not yet revealed
+
+                // Scale-in effect for point at animation edge
+                let r = this.options.pointRadius;
+                if (progress < 1) {
+                    const distFromEdge = animRight - p.x;
+                    if (distFromEdge < 20) {
+                        r *= Math.max(0, distFromEdge / 20);
+                    }
+                }
+                if (r <= 0) return;
+
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, this.options.pointRadius, 0, Math.PI * 2);
+                ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
                 ctx.fillStyle = color;
                 ctx.fill();
                 ctx.strokeStyle = bgColor;
@@ -6458,7 +6471,7 @@ if (typeof window !== 'undefined') {
             }
 
             // Make visible to measure dimensions
-            this.element.style.opacity = '1';
+            this.element.style.opacity = '0.95';
             
             // Get canvas position on screen
             const canvasRect = this.refElement.getBoundingClientRect();

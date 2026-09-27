@@ -60,7 +60,7 @@
             }
 
             // Make visible to measure dimensions
-            this.element.style.opacity = '1';
+            this.element.style.opacity = '0.95';
             
             // Get canvas position on screen
             const canvasRect = this.refElement.getBoundingClientRect();

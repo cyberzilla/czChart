@@ -212,20 +212,33 @@ class LineSeries {
         ctx.lineCap = 'round';
         ctx.stroke(path);
 
-        ctx.restore(); // exit clip — line and fill are clipped, points are NOT
+        ctx.restore(); // exit clip — line and fill are clipped
         this._renderedPoints = points;
 
-        // Draw points OUTSIDE clip so edge points are not cut off
+        // Draw points — filter by animation progress so they follow the line
         if (this.options.pointRadius > 0) {
             ctx.save();
             const color = this.dataset.color || '#000';
             const bgColor = this._getBackgroundColor();
+            const animRight = plotArea.left + plotArea.width * progress;
 
-            // Normal points: small subtle dots (skip selected, drawn separately)
+            // Normal points: only draw if within animation progress
             points.forEach(p => {
                 if (this._selectedPoints.has(p.index)) return;
+                if (progress < 1 && p.x > animRight + 2) return; // not yet revealed
+
+                // Scale-in effect for point at animation edge
+                let r = this.options.pointRadius;
+                if (progress < 1) {
+                    const distFromEdge = animRight - p.x;
+                    if (distFromEdge < 20) {
+                        r *= Math.max(0, distFromEdge / 20);
+                    }
+                }
+                if (r <= 0) return;
+
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, this.options.pointRadius, 0, Math.PI * 2);
+                ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
                 ctx.fillStyle = color;
                 ctx.fill();
                 ctx.strokeStyle = bgColor;
