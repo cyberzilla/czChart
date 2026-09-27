@@ -9,9 +9,11 @@
     line: 'LineSeries',
     bar: 'BarSeries',
     horizontalBar: 'HorizontalBarSeries',
-    area: 'LineSeries',      // area is line with fill=true
+    area: 'LineSeries',           // area is line with fill=true
+    spline: 'LineSeries',         // spline is line with smooth=true
+    'area-spline': 'LineSeries',  // area-spline is area with smooth=true
     pie: 'PieSeries',
-    donut: 'PieSeries',      // donut is pie with innerRadius
+    donut: 'PieSeries',           // donut is pie with innerRadius
     scatter: 'ScatterSeries',
     radar: 'RadarSeries',
     gauge: 'GaugeSeries',
@@ -68,7 +70,8 @@
 
       // Chart type
       this.type = config.type || 'line';
-      this.isRadial = RADIAL_TYPES.includes(this.type);
+      this._types = config.types || null;  // per-dataset type overrides (c3.js-style)
+      this.isRadial = !this._types && RADIAL_TYPES.includes(this.type);
 
       // Internal state
       this.series = [];
@@ -290,20 +293,23 @@
 
       if (!this.normalizedData || !this.normalizedData.datasets) return;
 
-      const seriesClass = SERIES_MAP[this.type];
-      if (!seriesClass || !CZ[seriesClass]) {
-        throw new Error('czChart: Unknown chart type "' + this.type + '"');
-      }
-
-      const seriesOptions = this._getSeriesOptions();
-
-      // Count bar datasets for grouped positioning
+      // Pre-count bar datasets for grouped positioning
       let barCount = 0;
-      if (this.type === 'bar' || this.type === 'horizontalBar') {
-        barCount = this.normalizedData.datasets.length;
-      }
+      this.normalizedData.datasets.forEach((dataset, index) => {
+        const dsType = this._resolveDatasetType(dataset.name, index);
+        if (dsType === 'bar' || dsType === 'horizontalBar') barCount++;
+      });
+      let barIndex = 0;
 
       this.normalizedData.datasets.forEach((dataset, index) => {
+        const dsType = this._resolveDatasetType(dataset.name, index);
+        const seriesClass = SERIES_MAP[dsType];
+        if (!seriesClass || !CZ[seriesClass]) {
+          throw new Error('czChart: Unknown chart type "' + dsType + '"');
+        }
+
+        const seriesOptions = this._getSeriesOptionsForType(dsType);
+
         const SeriesConstructor = CZ[seriesClass];
         const instance = new SeriesConstructor(this, {
           ...seriesOptions,
@@ -311,8 +317,11 @@
           datasetIndex: index
         });
 
+        // Store resolved type on instance for interaction handling
+        instance._seriesType = dsType;
+
         // For scatter, convert normalized data to {points: [{x, y}]} format
-        if (this.type === 'scatter') {
+        if (dsType === 'scatter') {
           const labels = this.normalizedData.labels;
           const scatterDataset = {
             ...dataset,
@@ -322,7 +331,7 @@
             }))
           };
           instance.setData(scatterDataset);
-        } else if (this.type === 'candlestick') {
+        } else if (dsType === 'candlestick') {
           // For candlestick, merge all 4 datasets (open,high,low,close) into one
           // Only first series instance draws; skip creating additional ones
           if (index > 0) return; // skip — handled by first instance
@@ -343,7 +352,7 @@
             ohlc: ohlcData,
             color: seriesOptions.bullishColor || '#10b981'
           });
-        } else if (this.type === 'boxplot') {
+        } else if (dsType === 'boxplot') {
           // Merge 5 datasets (min, q1, median, q3, max) into boxData
           if (index > 0) return;
 
@@ -364,7 +373,7 @@
             boxData: boxData,
             color: seriesOptions.color || dataset.color || '#3b82f6'
           });
-        } else if (this.type === 'bubble') {
+        } else if (dsType === 'bubble') {
           // Bubble: use first y field for Y values, pass sizes from rawData
           const labels = this.normalizedData.labels;
           const bubbleDataset = {
@@ -380,8 +389,9 @@
         }
 
         // For grouped bars (vertical and horizontal), set position info
-        if ((this.type === 'bar' || this.type === 'horizontalBar') && instance.setDatasetIndex) {
-          instance.setDatasetIndex(index, barCount);
+        if ((dsType === 'bar' || dsType === 'horizontalBar') && instance.setDatasetIndex) {
+          instance.setDatasetIndex(barIndex, barCount);
+          barIndex++;
         }
 
         this.series.push(instance);
@@ -391,16 +401,43 @@
       this._updateLegend();
     }
 
+    /**
+     * Resolve the chart type for a specific dataset.
+     * Uses per-dataset type override (config.types) if available, otherwise falls back to chart.type.
+     * @private
+     * @param {string} datasetName - The dataset name
+     * @param {number} index - The dataset index
+     * @returns {string} Resolved chart type
+     */
+    _resolveDatasetType(datasetName, index) {
+      if (this._types) {
+        if (this._types[datasetName]) return this._types[datasetName];
+      }
+      return this.type;
+    }
+
     /** @private */
-    _getSeriesOptions() {
+    _getSeriesOptionsForType(type) {
       const opts = {};
 
-      switch (this.type) {
+      switch (type) {
         case 'line':
           Object.assign(opts, this.options.series);
+          // In mixed mode, enforce: line = straight, no fill
+          if (this._types) { opts.smooth = false; opts.fill = false; }
           break;
         case 'area':
           Object.assign(opts, this.options.series, { fill: true });
+          // In mixed mode, enforce: area = straight with fill
+          if (this._types) { opts.smooth = false; }
+          break;
+        case 'spline':
+          Object.assign(opts, this.options.series, { smooth: true });
+          // In mixed mode, enforce: spline = curved, no fill
+          if (this._types) { opts.fill = false; }
+          break;
+        case 'area-spline':
+          Object.assign(opts, this.options.series, { fill: true, smooth: true });
           break;
         case 'bar':
           Object.assign(opts, this.options.bar);
@@ -966,8 +1003,8 @@
     _handleClick(e) {
       if (this._destroyed) return;
       
-      // Toggle point selection on line/area/scatter/radar/bar/horizontalBar/candlestick charts
-      if (this.type === 'line' || this.type === 'area' || this.type === 'scatter' || this.type === 'radar' || this.type === 'bar' || this.type === 'horizontalBar' || this.type === 'candlestick') {
+      // Toggle point selection on charts that support it (line, area, scatter, bar, etc.)
+      if (this.series.some(s => s.togglePoint && s.visible)) {
         const rect = this.renderer.getMainCanvas().getBoundingClientRect();
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
@@ -1089,9 +1126,9 @@
       if (this.series[index]) {
         this.series[index].visible = !this.series[index].visible;
 
-        // For bar charts, recalculate grouped positions so visible bars
+        // For bar charts (including mixed), recalculate grouped positions so visible bars
         // redistribute evenly (no empty gaps)
-        if (this.type === 'bar' || this.type === 'horizontalBar') {
+        if (this.series.some(s => s.setDatasetIndex)) {
           this._recalcBarPositions();
         }
 
@@ -1107,17 +1144,16 @@
      * @private
      */
     _recalcBarPositions() {
+      const barSeries = this.series.filter(s => s.setDatasetIndex);
+      const visibleCount = barSeries.filter(s => s.visible).length;
       let visibleIndex = 0;
-      const visibleCount = this.series.filter(s => s.visible).length;
-      this.series.forEach(s => {
-        if (s.setDatasetIndex) {
-          if (s.visible) {
-            s.setDatasetIndex(visibleIndex, visibleCount);
-            visibleIndex++;
-          } else {
-            // Keep original index but set totalDatasets to visibleCount
-            s.setDatasetIndex(0, visibleCount);
-          }
+      barSeries.forEach(s => {
+        if (s.visible) {
+          s.setDatasetIndex(visibleIndex, visibleCount);
+          visibleIndex++;
+        } else {
+          // Keep original index but set totalDatasets to visibleCount
+          s.setDatasetIndex(0, visibleCount);
         }
       });
     }
@@ -1163,6 +1199,15 @@
       return this._addSeries('BarSeries', options);
     }
 
+    /**
+     * Add an area series (composable API)
+     * @param {Object} options - Series options
+     * @returns {Object} Series instance
+     */
+    addAreaSeries(options = {}) {
+      return this._addSeries('LineSeries', { fill: true, ...options });
+    }
+
     /** @private */
     _addSeries(seriesClassName, options) {
       const SeriesConstructor = CZ[seriesClassName];
@@ -1171,6 +1216,9 @@
       }
 
       const instance = new SeriesConstructor(this, options);
+      // Infer series type from class and options for mixed chart compatibility
+      instance._seriesType = options.fill ? 'area' :
+        (seriesClassName === 'BarSeries' ? 'bar' : 'line');
       this.series.push(instance);
 
       // Return a proxy with convenient methods

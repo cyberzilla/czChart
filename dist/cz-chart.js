@@ -2,7 +2,7 @@
  * czChart v1.0.0 — Lightweight, Data-Driven Chart Library
  * (c) 2026 CyberZilla
  * Released under the MIT License
- * Built: 2026-09-26T09:18:21.842Z
+ * Built: 2026-09-27T06:52:17.734Z
  */
 
 (function(global) {
@@ -2027,16 +2027,44 @@ class LineSeries {
 
         // Fill area
         if (this.options.fill) {
+            // Use zero line as baseline (clamped to plot area bounds)
+            const zeroY = yScale
+                ? Math.max(plotArea.top, Math.min(plotArea.bottom, yScale.getPixel(0)))
+                : plotArea.bottom;
+
             const fillPath = new Path2D(path);
-            fillPath.lineTo(points[points.length - 1].x, plotArea.bottom);
-            fillPath.lineTo(points[0].x, plotArea.bottom);
+            fillPath.lineTo(points[points.length - 1].x, zeroY);
+            fillPath.lineTo(points[0].x, zeroY);
             fillPath.closePath();
 
-            const gradient = ctx.createLinearGradient(0, plotArea.top, 0, plotArea.bottom);
             const color = this.dataset.color || '#000';
-            gradient.addColorStop(0, window.CZ && window.CZ.ColorUtils ? window.CZ.ColorUtils.withAlpha(color, 0.4) : color);
-            gradient.addColorStop(1, window.CZ && window.CZ.ColorUtils ? window.CZ.ColorUtils.withAlpha(color, 0.0) : 'transparent');
-            
+
+            // Determine if data is mostly above or below zero for gradient direction
+            const minPtY = Math.min(...points.map(p => p.y));
+            const maxPtY = Math.max(...points.map(p => p.y));
+
+            let gradient;
+            if (maxPtY <= zeroY) {
+                // All points at or above zero line (positive data) — gradient fades down
+                gradient = ctx.createLinearGradient(0, minPtY, 0, zeroY);
+                gradient.addColorStop(0, window.CZ && window.CZ.ColorUtils ? window.CZ.ColorUtils.withAlpha(color, 0.4) : color);
+                gradient.addColorStop(1, window.CZ && window.CZ.ColorUtils ? window.CZ.ColorUtils.withAlpha(color, 0.0) : 'transparent');
+            } else if (minPtY >= zeroY) {
+                // All points at or below zero line (negative data) — gradient fades up
+                gradient = ctx.createLinearGradient(0, maxPtY, 0, zeroY);
+                gradient.addColorStop(0, window.CZ && window.CZ.ColorUtils ? window.CZ.ColorUtils.withAlpha(color, 0.4) : color);
+                gradient.addColorStop(1, window.CZ && window.CZ.ColorUtils ? window.CZ.ColorUtils.withAlpha(color, 0.0) : 'transparent');
+            } else {
+                // Mixed positive/negative — gradient radiates from zero line
+                gradient = ctx.createLinearGradient(0, minPtY, 0, maxPtY);
+                const zeroRatio = (zeroY - minPtY) / (maxPtY - minPtY);
+                const alpha = window.CZ && window.CZ.ColorUtils ? window.CZ.ColorUtils.withAlpha(color, 0.4) : color;
+                const clear = window.CZ && window.CZ.ColorUtils ? window.CZ.ColorUtils.withAlpha(color, 0.0) : 'transparent';
+                gradient.addColorStop(0, alpha);
+                gradient.addColorStop(Math.max(0, Math.min(1, zeroRatio)), clear);
+                gradient.addColorStop(1, alpha);
+            }
+
             ctx.fillStyle = gradient;
             ctx.fill(fillPath);
         }
@@ -3888,7 +3916,7 @@ class GaugeSeries {
         this.options = Object.assign({
             min: 0,
             max: 100,
-            arcWidth: 0.15,
+            arcWidth: 0.12,
             zones: [
                 { min: 0, max: 50, color: '#10b981' },
                 { min: 50, max: 75, color: '#f59e0b' },
@@ -3931,76 +3959,152 @@ class GaugeSeries {
         const { min, max, zones, arcWidth: arcWidthRatio, showValue, valueFormat } = this.options;
         const range = max - min;
         
-        // Calculate center and radius
+        // Layout
         const cx = plotArea.left + plotArea.width / 2;
-        const cy = plotArea.top + plotArea.height * 0.85; // Move center up slightly to fit value text
-        const maxRadius = Math.min(plotArea.width / 2, plotArea.height * 0.8);
+        const cy = plotArea.top + plotArea.height * 0.92;
+        const maxRadius = Math.min(plotArea.width / 2 - 4, plotArea.height * 0.85);
         const arcWidth = maxRadius * arcWidthRatio;
         const radius = maxRadius - arcWidth / 2;
+        const innerR = radius - arcWidth / 2;
 
         ctx.save();
 
-        // 1. Draw background arc
+        // ── 1. Background arc (rounded ends) ──
         ctx.beginPath();
-        ctx.arc(cx, cy, radius, Math.PI, 0);
+        ctx.arc(cx, cy, radius, Math.PI, 2 * Math.PI);
         ctx.lineWidth = arcWidth;
         ctx.strokeStyle = '#e5e7eb';
-        ctx.lineCap = 'butt';
+        ctx.lineCap = 'round';
         ctx.stroke();
 
-        // 2. Draw colored zones
+        // ── 2. Colored zone arcs ──
         if (zones && zones.length > 0) {
-            for (const zone of zones) {
-                // Clamp zones to min/max
-                const zoneMin = Math.max(min, zone.min);
-                const zoneMax = Math.min(max, zone.max);
-                if (zoneMin >= zoneMax) continue;
+            for (let z = 0; z < zones.length; z++) {
+                const zone = zones[z];
+                const zMin = Math.max(min, zone.min);
+                const zMax = Math.min(max, zone.max);
+                if (zMin >= zMax) continue;
 
-                const startAngle = Math.PI + ((zoneMin - min) / range) * Math.PI;
-                const endAngle = Math.PI + ((zoneMax - min) / range) * Math.PI;
-                
+                const sa = Math.PI + ((zMin - min) / range) * Math.PI;
+                const ea = Math.PI + ((zMax - min) / range) * Math.PI;
+
                 ctx.beginPath();
-                ctx.arc(cx, cy, radius, startAngle, endAngle);
+                ctx.arc(cx, cy, radius, sa, ea);
                 ctx.lineWidth = arcWidth;
                 ctx.strokeStyle = zone.color;
+                ctx.lineCap = 'butt';
                 ctx.stroke();
+            }
+
+            // Cap the two arc endpoints with filled circles matching first/last zone color
+            const capR = arcWidth / 2;
+            // Left endpoint (start of arc = angle π)
+            const leftX = cx + Math.cos(Math.PI) * radius;
+            const leftY = cy + Math.sin(Math.PI) * radius;
+            ctx.beginPath();
+            ctx.arc(leftX, leftY, capR, 0, Math.PI * 2);
+            ctx.fillStyle = zones[0].color;
+            ctx.fill();
+
+            // Right endpoint (end of arc = angle 0/2π)
+            const rightX = cx + Math.cos(0) * radius;
+            const rightY = cy + Math.sin(0) * radius;
+            ctx.beginPath();
+            ctx.arc(rightX, rightY, capR, 0, Math.PI * 2);
+            ctx.fillStyle = zones[zones.length - 1].color;
+            ctx.fill();
+        }
+
+        // ── 3. Tick marks — major (with numbers) + minor ──
+        const majorCount = 10;
+        const minorPerMajor = 5;
+        const totalTicks = majorCount * minorPerMajor;
+
+        for (let i = 0; i <= totalTicks; i++) {
+            const angle = Math.PI + (i / totalTicks) * Math.PI;
+            const isMajor = (i % minorPerMajor === 0);
+
+            const tickLen = isMajor ? maxRadius * 0.08 : maxRadius * 0.04;
+            const tickWidth = isMajor ? 2.5 : 1;
+            const startR = innerR;
+            const endR = startR - tickLen;
+
+            ctx.beginPath();
+            ctx.moveTo(cx + Math.cos(angle) * startR, cy + Math.sin(angle) * startR);
+            ctx.lineTo(cx + Math.cos(angle) * endR, cy + Math.sin(angle) * endR);
+            ctx.lineWidth = tickWidth;
+            ctx.strokeStyle = isMajor ? '#374151' : '#9ca3af';
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            // Numbers at major ticks
+            if (isMajor) {
+                const tickVal = min + (i / totalTicks) * range;
+                const labelR = startR - tickLen - maxRadius * 0.06;
+                const lx = cx + Math.cos(angle) * labelR;
+                const ly = cy + Math.sin(angle) * labelR;
+
+                const fontSize = Math.max(9, Math.min(14, maxRadius * 0.065));
+                ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+                ctx.fillStyle = '#374151';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(Math.round(tickVal).toString(), lx, ly);
             }
         }
 
-        // 3. Draw tick marks around the arc
-        const tickCount = 10;
-        ctx.strokeStyle = '#9ca3af';
-        ctx.lineWidth = 2;
-        for (let i = 0; i <= tickCount; i++) {
-            const angle = Math.PI + (i / tickCount) * Math.PI;
-            // ticks on the inner edge of the arc
-            const innerR = radius - arcWidth / 2;
-            const outerR = innerR - (maxRadius * 0.05); // tick length
-            
-            ctx.beginPath();
-            ctx.moveTo(cx + Math.cos(angle) * innerR, cy + Math.sin(angle) * innerR);
-            ctx.lineTo(cx + Math.cos(angle) * outerR, cy + Math.sin(angle) * outerR);
-            ctx.stroke();
+        // ── 4. Value display — large centered number ──
+        const values = this.dataset.values || (this.dataset.data ? this.dataset.data : []);
+
+        if (showValue && values.length > 0) {
+            let displayVal = values[values.length - 1];
+            if (typeof displayVal === 'object' && displayVal !== null) {
+                displayVal = displayVal.y !== undefined ? displayVal.y : displayVal.value;
+            }
+
+            const rawVal = displayVal;
+            let animatedVal = min + (rawVal - min) * progress;
+            let animatedDisplayVal;
+            if (valueFormat && typeof valueFormat === 'function') {
+                animatedDisplayVal = valueFormat(animatedVal);
+            } else {
+                animatedDisplayVal = Math.round(animatedVal).toString();
+            }
+
+            const valueFontSize = Math.max(18, Math.min(48, maxRadius * 0.24));
+            const valueY = cy - maxRadius * 0.28;
+
+            ctx.font = `bold ${valueFontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+            ctx.fillStyle = '#111827';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(animatedDisplayVal, cx, valueY);
+
+            // Label below value
+            const labelText = this.dataset.name || '';
+            if (labelText) {
+                const labelFontSize = Math.max(9, Math.min(14, maxRadius * 0.07));
+                ctx.font = `500 ${labelFontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+                ctx.fillStyle = '#9ca3af';
+                ctx.fillText(labelText, cx, valueY + valueFontSize * 0.65);
+            }
         }
 
         this._renderedPoints = [];
 
-        // 4. Draw needles
-        const values = this.dataset.values || (this.dataset.data ? this.dataset.data : []);
-        const datasetColor = this.dataset.color || '#374151';
+        // ── 5. Needle ──
+        const datasetColor = this.dataset.color || '#ef4444';
         
         for (let i = 0; i < values.length; i++) {
             let val = values[i];
             if (typeof val === 'object' && val !== null) {
                 val = val.y !== undefined ? val.y : val.value;
             }
-            
-            // Animate value based on progress
+
             const targetVal = min + (val - min) * progress;
             const clampedVal = Math.max(min, Math.min(max, targetVal));
             const angle = Math.PI + ((clampedVal - min) / range) * Math.PI;
 
-            // Store for hit testing (even though it returns null, keeping state is good practice)
             this._renderedPoints.push({
                 x: cx + Math.cos(angle) * radius,
                 y: cy + Math.sin(angle) * radius,
@@ -4008,71 +4112,75 @@ class GaugeSeries {
             });
 
             ctx.save();
-            
+
             // Needle shadow
-            ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-            ctx.shadowBlur = 6;
-            ctx.shadowOffsetX = 2;
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
+            ctx.shadowBlur = 5;
+            ctx.shadowOffsetX = 1;
             ctx.shadowOffsetY = 2;
 
-            // Needle
-            const needleLen = radius - arcWidth / 2 - (maxRadius * 0.05);
-            const needleBase = maxRadius * 0.06;
+            const needleLen = innerR - maxRadius * 0.13;  // tip stops before tick numbers
+            const baseR = maxRadius * 0.045;               // rounded base radius
 
             ctx.translate(cx, cy);
             ctx.rotate(angle);
 
+            // ── Teardrop needle: rounded base → smooth taper → sharp tip ──
             ctx.beginPath();
-            ctx.moveTo(0, -needleBase / 2);
-            ctx.lineTo(needleLen, 0);
-            ctx.lineTo(0, needleBase / 2);
+            // Left semicircle of the base (tail side)
+            ctx.arc(0, 0, baseR, -Math.PI / 2, Math.PI / 2, true);
+            // Bezier curve: bottom-base → sharp tip
+            ctx.bezierCurveTo(
+                needleLen * 0.3, baseR * 0.45,
+                needleLen * 0.65, 1.2,
+                needleLen, 0
+            );
+            // Bezier curve: sharp tip → top-base
+            ctx.bezierCurveTo(
+                needleLen * 0.65, -1.2,
+                needleLen * 0.3, -baseR * 0.45,
+                0, -baseR
+            );
             ctx.closePath();
-            
-            ctx.fillStyle = datasetColor;
+
+            // Gradient fill for depth
+            const grad = ctx.createLinearGradient(0, -baseR, 0, baseR);
+            grad.addColorStop(0, datasetColor);
+            grad.addColorStop(0.45, datasetColor);
+            grad.addColorStop(0.55, window.CZ && window.CZ.ColorUtils
+                ? window.CZ.ColorUtils.withAlpha(datasetColor, 0.7) : datasetColor);
+            grad.addColorStop(1, datasetColor);
+            ctx.fillStyle = grad;
             ctx.fill();
-            
+
             ctx.restore();
         }
 
-        // 5. Draw center circle (hub)
+        // ── 6. Pivot hub (layered circles for depth) ──
+        const hubR = maxRadius * 0.05;
+        
+        // Shadow ring
+        ctx.save();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+        ctx.shadowBlur = 6;
+        ctx.shadowOffsetY = 1;
         ctx.beginPath();
-        ctx.arc(cx, cy, maxRadius * 0.08, 0, Math.PI * 2);
+        ctx.arc(cx, cy, hubR, 0, Math.PI * 2);
+        ctx.fillStyle = '#374151';
+        ctx.fill();
+        ctx.restore();
+
+        // Mid ring
+        ctx.beginPath();
+        ctx.arc(cx, cy, hubR * 0.75, 0, Math.PI * 2);
         ctx.fillStyle = '#1f2937';
         ctx.fill();
-        
-        ctx.beginPath();
-        ctx.arc(cx, cy, maxRadius * 0.03, 0, Math.PI * 2);
-        ctx.fillStyle = '#f9fafb';
-        ctx.fill();
 
-        // 6. Draw value text below the arc
-        if (showValue && values.length > 0) {
-            let displayVal = values[values.length - 1]; // Use last value in array
-            if (typeof displayVal === 'object' && displayVal !== null) {
-                displayVal = displayVal.y !== undefined ? displayVal.y : displayVal.value;
-            }
-            
-            const rawVal = displayVal;
-            if (valueFormat && typeof valueFormat === 'function') {
-                displayVal = valueFormat(displayVal);
-            } else {
-                displayVal = Math.round(displayVal).toString();
-            }
-            
-            // Animated value for visual smoothness
-            let animatedDisplayVal = min + (rawVal - min) * progress;
-            if (valueFormat && typeof valueFormat === 'function') {
-                animatedDisplayVal = valueFormat(animatedDisplayVal);
-            } else {
-                animatedDisplayVal = Math.round(animatedDisplayVal).toString();
-            }
-            
-            ctx.font = `bold ${Math.max(14, Math.min(36, maxRadius * 0.12))}px sans-serif`;
-            ctx.fillStyle = '#111827';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-            ctx.fillText(animatedDisplayVal, cx, cy + maxRadius * 0.08);
-        }
+        // Center highlight
+        ctx.beginPath();
+        ctx.arc(cx, cy, hubR * 0.35, 0, Math.PI * 2);
+        ctx.fillStyle = '#d1d5db';
+        ctx.fill();
 
         ctx.restore();
     }
@@ -6952,9 +7060,11 @@ if (typeof window !== 'undefined') {
     line: 'LineSeries',
     bar: 'BarSeries',
     horizontalBar: 'HorizontalBarSeries',
-    area: 'LineSeries',      // area is line with fill=true
+    area: 'LineSeries',           // area is line with fill=true
+    spline: 'LineSeries',         // spline is line with smooth=true
+    'area-spline': 'LineSeries',  // area-spline is area with smooth=true
     pie: 'PieSeries',
-    donut: 'PieSeries',      // donut is pie with innerRadius
+    donut: 'PieSeries',           // donut is pie with innerRadius
     scatter: 'ScatterSeries',
     radar: 'RadarSeries',
     gauge: 'GaugeSeries',
@@ -7011,7 +7121,8 @@ if (typeof window !== 'undefined') {
 
       // Chart type
       this.type = config.type || 'line';
-      this.isRadial = RADIAL_TYPES.includes(this.type);
+      this._types = config.types || null;  // per-dataset type overrides (c3.js-style)
+      this.isRadial = !this._types && RADIAL_TYPES.includes(this.type);
 
       // Internal state
       this.series = [];
@@ -7233,20 +7344,23 @@ if (typeof window !== 'undefined') {
 
       if (!this.normalizedData || !this.normalizedData.datasets) return;
 
-      const seriesClass = SERIES_MAP[this.type];
-      if (!seriesClass || !CZ[seriesClass]) {
-        throw new Error('czChart: Unknown chart type "' + this.type + '"');
-      }
-
-      const seriesOptions = this._getSeriesOptions();
-
-      // Count bar datasets for grouped positioning
+      // Pre-count bar datasets for grouped positioning
       let barCount = 0;
-      if (this.type === 'bar' || this.type === 'horizontalBar') {
-        barCount = this.normalizedData.datasets.length;
-      }
+      this.normalizedData.datasets.forEach((dataset, index) => {
+        const dsType = this._resolveDatasetType(dataset.name, index);
+        if (dsType === 'bar' || dsType === 'horizontalBar') barCount++;
+      });
+      let barIndex = 0;
 
       this.normalizedData.datasets.forEach((dataset, index) => {
+        const dsType = this._resolveDatasetType(dataset.name, index);
+        const seriesClass = SERIES_MAP[dsType];
+        if (!seriesClass || !CZ[seriesClass]) {
+          throw new Error('czChart: Unknown chart type "' + dsType + '"');
+        }
+
+        const seriesOptions = this._getSeriesOptionsForType(dsType);
+
         const SeriesConstructor = CZ[seriesClass];
         const instance = new SeriesConstructor(this, {
           ...seriesOptions,
@@ -7254,8 +7368,11 @@ if (typeof window !== 'undefined') {
           datasetIndex: index
         });
 
+        // Store resolved type on instance for interaction handling
+        instance._seriesType = dsType;
+
         // For scatter, convert normalized data to {points: [{x, y}]} format
-        if (this.type === 'scatter') {
+        if (dsType === 'scatter') {
           const labels = this.normalizedData.labels;
           const scatterDataset = {
             ...dataset,
@@ -7265,7 +7382,7 @@ if (typeof window !== 'undefined') {
             }))
           };
           instance.setData(scatterDataset);
-        } else if (this.type === 'candlestick') {
+        } else if (dsType === 'candlestick') {
           // For candlestick, merge all 4 datasets (open,high,low,close) into one
           // Only first series instance draws; skip creating additional ones
           if (index > 0) return; // skip — handled by first instance
@@ -7286,7 +7403,7 @@ if (typeof window !== 'undefined') {
             ohlc: ohlcData,
             color: seriesOptions.bullishColor || '#10b981'
           });
-        } else if (this.type === 'boxplot') {
+        } else if (dsType === 'boxplot') {
           // Merge 5 datasets (min, q1, median, q3, max) into boxData
           if (index > 0) return;
 
@@ -7307,7 +7424,7 @@ if (typeof window !== 'undefined') {
             boxData: boxData,
             color: seriesOptions.color || dataset.color || '#3b82f6'
           });
-        } else if (this.type === 'bubble') {
+        } else if (dsType === 'bubble') {
           // Bubble: use first y field for Y values, pass sizes from rawData
           const labels = this.normalizedData.labels;
           const bubbleDataset = {
@@ -7323,8 +7440,9 @@ if (typeof window !== 'undefined') {
         }
 
         // For grouped bars (vertical and horizontal), set position info
-        if ((this.type === 'bar' || this.type === 'horizontalBar') && instance.setDatasetIndex) {
-          instance.setDatasetIndex(index, barCount);
+        if ((dsType === 'bar' || dsType === 'horizontalBar') && instance.setDatasetIndex) {
+          instance.setDatasetIndex(barIndex, barCount);
+          barIndex++;
         }
 
         this.series.push(instance);
@@ -7334,16 +7452,43 @@ if (typeof window !== 'undefined') {
       this._updateLegend();
     }
 
+    /**
+     * Resolve the chart type for a specific dataset.
+     * Uses per-dataset type override (config.types) if available, otherwise falls back to chart.type.
+     * @private
+     * @param {string} datasetName - The dataset name
+     * @param {number} index - The dataset index
+     * @returns {string} Resolved chart type
+     */
+    _resolveDatasetType(datasetName, index) {
+      if (this._types) {
+        if (this._types[datasetName]) return this._types[datasetName];
+      }
+      return this.type;
+    }
+
     /** @private */
-    _getSeriesOptions() {
+    _getSeriesOptionsForType(type) {
       const opts = {};
 
-      switch (this.type) {
+      switch (type) {
         case 'line':
           Object.assign(opts, this.options.series);
+          // In mixed mode, enforce: line = straight, no fill
+          if (this._types) { opts.smooth = false; opts.fill = false; }
           break;
         case 'area':
           Object.assign(opts, this.options.series, { fill: true });
+          // In mixed mode, enforce: area = straight with fill
+          if (this._types) { opts.smooth = false; }
+          break;
+        case 'spline':
+          Object.assign(opts, this.options.series, { smooth: true });
+          // In mixed mode, enforce: spline = curved, no fill
+          if (this._types) { opts.fill = false; }
+          break;
+        case 'area-spline':
+          Object.assign(opts, this.options.series, { fill: true, smooth: true });
           break;
         case 'bar':
           Object.assign(opts, this.options.bar);
@@ -7909,8 +8054,8 @@ if (typeof window !== 'undefined') {
     _handleClick(e) {
       if (this._destroyed) return;
       
-      // Toggle point selection on line/area/scatter/radar/bar/horizontalBar/candlestick charts
-      if (this.type === 'line' || this.type === 'area' || this.type === 'scatter' || this.type === 'radar' || this.type === 'bar' || this.type === 'horizontalBar' || this.type === 'candlestick') {
+      // Toggle point selection on charts that support it (line, area, scatter, bar, etc.)
+      if (this.series.some(s => s.togglePoint && s.visible)) {
         const rect = this.renderer.getMainCanvas().getBoundingClientRect();
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
@@ -8032,9 +8177,9 @@ if (typeof window !== 'undefined') {
       if (this.series[index]) {
         this.series[index].visible = !this.series[index].visible;
 
-        // For bar charts, recalculate grouped positions so visible bars
+        // For bar charts (including mixed), recalculate grouped positions so visible bars
         // redistribute evenly (no empty gaps)
-        if (this.type === 'bar' || this.type === 'horizontalBar') {
+        if (this.series.some(s => s.setDatasetIndex)) {
           this._recalcBarPositions();
         }
 
@@ -8050,17 +8195,16 @@ if (typeof window !== 'undefined') {
      * @private
      */
     _recalcBarPositions() {
+      const barSeries = this.series.filter(s => s.setDatasetIndex);
+      const visibleCount = barSeries.filter(s => s.visible).length;
       let visibleIndex = 0;
-      const visibleCount = this.series.filter(s => s.visible).length;
-      this.series.forEach(s => {
-        if (s.setDatasetIndex) {
-          if (s.visible) {
-            s.setDatasetIndex(visibleIndex, visibleCount);
-            visibleIndex++;
-          } else {
-            // Keep original index but set totalDatasets to visibleCount
-            s.setDatasetIndex(0, visibleCount);
-          }
+      barSeries.forEach(s => {
+        if (s.visible) {
+          s.setDatasetIndex(visibleIndex, visibleCount);
+          visibleIndex++;
+        } else {
+          // Keep original index but set totalDatasets to visibleCount
+          s.setDatasetIndex(0, visibleCount);
         }
       });
     }
@@ -8106,6 +8250,15 @@ if (typeof window !== 'undefined') {
       return this._addSeries('BarSeries', options);
     }
 
+    /**
+     * Add an area series (composable API)
+     * @param {Object} options - Series options
+     * @returns {Object} Series instance
+     */
+    addAreaSeries(options = {}) {
+      return this._addSeries('LineSeries', { fill: true, ...options });
+    }
+
     /** @private */
     _addSeries(seriesClassName, options) {
       const SeriesConstructor = CZ[seriesClassName];
@@ -8114,6 +8267,9 @@ if (typeof window !== 'undefined') {
       }
 
       const instance = new SeriesConstructor(this, options);
+      // Infer series type from class and options for mixed chart compatibility
+      instance._seriesType = options.fill ? 'area' :
+        (seriesClassName === 'BarSeries' ? 'bar' : 'line');
       this.series.push(instance);
 
       // Return a proxy with convenient methods

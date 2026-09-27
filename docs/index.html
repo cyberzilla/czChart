@@ -86,6 +86,7 @@
         .badge-treemap { background: #fef3c7; color: #92400e; }
         .badge-boxplot { background: #f5f3ff; color: #5b21b6; }
         .badge-polar { background: #fce7f3; color: #9d174d; }
+        .badge-mixed { background: #e0e7ff; color: #3730a3; }
         .badge-new { background: #dcfce7; color: #15803d; font-size: 9px; vertical-align: top; }
         .full-width { grid-column: 1 / -1; }
         .section-title {
@@ -351,6 +352,56 @@
 });</code></pre>
         </div>
 
+        <!-- =============== MIXED / COMBO CHARTS =============== -->
+        <h3 class="section-title">🔀 Mixed / Combo Charts</h3>
+
+        <!-- MIXED: BAR + LINE + AREA -->
+        <div class="card full-width">
+            <h2>Bar + Line + Area <span class="badge badge-mixed">MIXED</span> <span class="badge badge-new">NEW</span></h2>
+            <p>Revenue as bars, profit as line, growth as smooth area — includes negative values crossing zero</p>
+            <div id="chart-mixed1" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-mixed1', {
+  data: [...],
+  x: 'month',
+  y: ['revenue', 'profit', 'growth'],
+  types: {
+    revenue: 'bar',
+    profit: 'line',
+    growth: 'area-spline'
+  }
+});</code></pre>
+        </div>
+
+        <!-- MIXED: AREA + AREA-SPLINE (c3.js style) -->
+        <div class="card full-width">
+            <h2>Area vs Area-Spline <span class="badge badge-mixed">MIXED</span> <span class="badge badge-new">NEW</span></h2>
+            <p>Two datasets with different rendering styles — straight <code>area</code> vs smooth <code>area-spline</code></p>
+            <div id="chart-mixed2" class="chart-container"></div>
+            <pre><code>// c3.js-style types config
+czChart.create('#chart-mixed2', {
+  data: [...],
+  types: {
+    data1: 'area',
+    data2: 'area-spline'
+  }
+});</code></pre>
+        </div>
+
+        <!-- MIXED: MULTI-BAR + SPLINE -->
+        <div class="card full-width">
+            <h2>Grouped Bar + Spline Overlay <span class="badge badge-mixed">MIXED</span> <span class="badge badge-new">NEW</span></h2>
+            <p>Two bar datasets grouped side-by-side with a smooth spline trend line overlaid</p>
+            <div id="chart-mixed3" class="chart-container"></div>
+            <pre><code>czChart.create('#chart-mixed3', {
+  data: [...],
+  types: {
+    online: 'bar',
+    store: 'bar',
+    total_trend: 'spline'
+  }
+});</code></pre>
+        </div>
+
         <!-- CSV DATA -->
         <div class="card full-width">
             <h2>CSV Data Source <span class="badge" style="background:#fef3c7;color:#92400e;">CSV</span></h2>
@@ -553,7 +604,7 @@
     czChart.create('#chart-gauge', {
         type: 'gauge',
         data: [
-            { label: 'CPU', value: 72 }
+            { label: 'CPU', value: 72, color: '#ef4444' }
         ],
         x: 'label',
         y: 'value',
@@ -766,6 +817,80 @@
         ],
         x: 'skill',
         y: 'score'
+    });
+
+    // =========================================================
+    // MIXED CHART 1 — Bar + Line + Area-Spline (with negatives)
+    // =========================================================
+    czChart.create('#chart-mixed1', {
+        data: [
+            { month: 'Jan', revenue: 4200, profit: -800,  growth: -500 },
+            { month: 'Feb', revenue: 5100, profit: 200,   growth: -200 },
+            { month: 'Mar', revenue: 4800, profit: -300,  growth: 100 },
+            { month: 'Apr', revenue: 6300, profit: 1500,  growth: 800 },
+            { month: 'May', revenue: 7200, profit: 2400,  growth: 1800 },
+            { month: 'Jun', revenue: 6800, profit: 1800,  growth: 1400 },
+            { month: 'Jul', revenue: 8100, profit: 3200,  growth: 2500 },
+            { month: 'Aug', revenue: 7500, profit: 2100,  growth: 1900 },
+            { month: 'Sep', revenue: 8800, profit: 3800,  growth: 3000 },
+            { month: 'Oct', revenue: 9200, profit: 4200,  growth: 3500 },
+            { month: 'Nov', revenue: 8600, profit: 3500,  growth: 2800 },
+            { month: 'Dec', revenue: 10500, profit: 5200,  growth: 4200 }
+        ],
+        x: 'month',
+        y: ['revenue', 'profit', 'growth'],
+        colors: ['#3b82f6', '#ef4444', '#10b981'],
+        types: {
+            revenue: 'bar',
+            profit: 'line',
+            growth: 'area-spline'
+        },
+        yAxis: { title: 'Amount (USD)' },
+        series: { pointRadius: 3 }
+    });
+
+    // =========================================================
+    // MIXED CHART 2 — Area vs Area-Spline (c3.js style)
+    // =========================================================
+    czChart.create('#chart-mixed2', {
+        data: [
+            { x: 'Jan', data1: 300, data2: 130 },
+            { x: 'Feb', data1: 350, data2: 100 },
+            { x: 'Mar', data1: 300, data2: 140 },
+            { x: 'Apr', data1: 0,   data2: 200 },
+            { x: 'May', data1: 0,   data2: 150 },
+            { x: 'Jun', data1: 0,   data2: 50  }
+        ],
+        x: 'x',
+        y: ['data1', 'data2'],
+        colors: ['#8b5cf6', '#f59e0b'],
+        seriesNames: ['data1', 'data2'],
+        types: {
+            data1: 'area',
+            data2: 'area-spline'
+        }
+    });
+
+    // =========================================================
+    // MIXED CHART 3 — Grouped Bars + Spline Overlay
+    // =========================================================
+    czChart.create('#chart-mixed3', {
+        data: [
+            { quarter: 'Q1', online: 340, store: 220, total_trend: 560 },
+            { quarter: 'Q2', online: 420, store: 280, total_trend: 700 },
+            { quarter: 'Q3', online: 380, store: 310, total_trend: 690 },
+            { quarter: 'Q4', online: 510, store: 350, total_trend: 860 }
+        ],
+        x: 'quarter',
+        y: ['online', 'store', 'total_trend'],
+        colors: ['#3b82f6', '#8b5cf6', '#ef4444'],
+        types: {
+            online: 'bar',
+            store: 'bar',
+            total_trend: 'spline'
+        },
+        yAxis: { title: 'Sales' },
+        series: { pointRadius: 4, lineWidth: 2.5 }
     });
 
     // =========================================================

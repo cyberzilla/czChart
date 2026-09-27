@@ -163,16 +163,44 @@ class LineSeries {
 
         // Fill area
         if (this.options.fill) {
+            // Use zero line as baseline (clamped to plot area bounds)
+            const zeroY = yScale
+                ? Math.max(plotArea.top, Math.min(plotArea.bottom, yScale.getPixel(0)))
+                : plotArea.bottom;
+
             const fillPath = new Path2D(path);
-            fillPath.lineTo(points[points.length - 1].x, plotArea.bottom);
-            fillPath.lineTo(points[0].x, plotArea.bottom);
+            fillPath.lineTo(points[points.length - 1].x, zeroY);
+            fillPath.lineTo(points[0].x, zeroY);
             fillPath.closePath();
 
-            const gradient = ctx.createLinearGradient(0, plotArea.top, 0, plotArea.bottom);
             const color = this.dataset.color || '#000';
-            gradient.addColorStop(0, window.CZ && window.CZ.ColorUtils ? window.CZ.ColorUtils.withAlpha(color, 0.4) : color);
-            gradient.addColorStop(1, window.CZ && window.CZ.ColorUtils ? window.CZ.ColorUtils.withAlpha(color, 0.0) : 'transparent');
-            
+
+            // Determine if data is mostly above or below zero for gradient direction
+            const minPtY = Math.min(...points.map(p => p.y));
+            const maxPtY = Math.max(...points.map(p => p.y));
+
+            let gradient;
+            if (maxPtY <= zeroY) {
+                // All points at or above zero line (positive data) — gradient fades down
+                gradient = ctx.createLinearGradient(0, minPtY, 0, zeroY);
+                gradient.addColorStop(0, window.CZ && window.CZ.ColorUtils ? window.CZ.ColorUtils.withAlpha(color, 0.4) : color);
+                gradient.addColorStop(1, window.CZ && window.CZ.ColorUtils ? window.CZ.ColorUtils.withAlpha(color, 0.0) : 'transparent');
+            } else if (minPtY >= zeroY) {
+                // All points at or below zero line (negative data) — gradient fades up
+                gradient = ctx.createLinearGradient(0, maxPtY, 0, zeroY);
+                gradient.addColorStop(0, window.CZ && window.CZ.ColorUtils ? window.CZ.ColorUtils.withAlpha(color, 0.4) : color);
+                gradient.addColorStop(1, window.CZ && window.CZ.ColorUtils ? window.CZ.ColorUtils.withAlpha(color, 0.0) : 'transparent');
+            } else {
+                // Mixed positive/negative — gradient radiates from zero line
+                gradient = ctx.createLinearGradient(0, minPtY, 0, maxPtY);
+                const zeroRatio = (zeroY - minPtY) / (maxPtY - minPtY);
+                const alpha = window.CZ && window.CZ.ColorUtils ? window.CZ.ColorUtils.withAlpha(color, 0.4) : color;
+                const clear = window.CZ && window.CZ.ColorUtils ? window.CZ.ColorUtils.withAlpha(color, 0.0) : 'transparent';
+                gradient.addColorStop(0, alpha);
+                gradient.addColorStop(Math.max(0, Math.min(1, zeroRatio)), clear);
+                gradient.addColorStop(1, alpha);
+            }
+
             ctx.fillStyle = gradient;
             ctx.fill(fillPath);
         }
